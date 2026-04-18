@@ -3,87 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, landscape">
-    <title>3D Map Explorer - Pro Mobile Controls</title>
+    <title>3D Sniper Explorer</title>
     <style>
-        body, html {
-            margin: 0; padding: 0;
-            width: 100vw; height: 100vh;
-            overflow: hidden;
-            background-color: #000;
-            touch-action: none;
-            user-select: none;
-            -webkit-user-select: none;
-        }
-        canvas {
-            display: block;
-            width: 100vw; height: 100vh;
-        }
+        body, html { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background-color: #000; touch-action: none; user-select: none; -webkit-user-select: none; }
+        canvas { display: block; }
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
         
-        #ui-layer {
-            position: absolute;
-            top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none;
-            z-index: 10;
-        }
-
-        #loading {
-            position: absolute;
-            top: 50%; left: 50%;
+        /* Crosshair */
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            width: 20px; height: 20px;
+            border: 2px solid rgba(255, 0, 0, 0.8);
+            border-radius: 50%;
             transform: translate(-50%, -50%);
-            font-family: Arial, sans-serif;
-            font-size: 24px;
-            color: white;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            pointer-events: none;
         }
 
-        #joystick-left {
-            position: absolute;
-            bottom: 40px; left: 50px;
-            width: 120px; height: 120px;
-            pointer-events: auto;
-        }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: Arial; color: white; }
 
         .action-btn {
-            position: absolute;
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.5);
-            color: white;
-            font-family: Arial, sans-serif;
-            font-weight: bold;
-            border-radius: 50%;
-            pointer-events: auto;
-            backdrop-filter: blur(4px);
-            transition: background 0.2s;
-        }
-        .action-btn:active { background: rgba(255, 255, 255, 0.6); }
-
-        #btn-jump {
-            bottom: 40px; right: 50px;
-            width: 70px; height: 70px;
-            font-size: 16px;
+            position: absolute; background: rgba(255, 255, 255, 0.2); border: 2px solid white;
+            color: white; font-family: Arial; font-weight: bold; border-radius: 50%;
+            pointer-events: auto; backdrop-filter: blur(4px);
         }
 
-        #btn-run {
-            bottom: 130px; right: 50px;
-            width: 60px; height: 60px;
-            font-size: 14px;
-        }
-
-        #btn-flash {
-            top: 30px; right: 50px;
-            width: 50px; height: 50px;
-            font-size: 20px;
-        }
+        #joystick-left { position: absolute; bottom: 40px; left: 50px; width: 120px; height: 120px; pointer-events: auto; }
+        #btn-shoot { bottom: 40px; right: 40px; width: 90px; height: 90px; background: rgba(255, 0, 0, 0.3); font-size: 18px; }
+        #btn-jump { bottom: 40px; right: 150px; width: 70px; height: 70px; }
+        #btn-run { bottom: 130px; right: 40px; width: 60px; height: 60px; }
+        #btn-flash { top: 20px; right: 20px; width: 50px; height: 50px; font-size: 20px; }
     </style>
 </head>
 <body>
 
-    <div id="loading">Loading Map...</div>
+    <div id="loading">Loading Assets...</div>
+    <div id="crosshair"></div>
     
     <div id="ui-layer">
         <div id="joystick-left"></div>
         <button id="btn-run" class="action-btn">RUN</button>
         <button id="btn-jump" class="action-btn">JUMP</button>
+        <button id="btn-shoot" class="action-btn">FIRE</button>
         <button id="btn-flash" class="action-btn">🔦</button>
     </div>
 
@@ -92,211 +52,147 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
 
     <script>
-        // 1. SCENE & CAMERA SETUP
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x87CEEB, 0.001);
-        scene.background = new THREE.Color(0x87CEEB);
-
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
-        
-        // CRITICAL FIX: Forces the camera to rotate Y (left/right) before X (up/down) to stop the tilted "roll" issue.
         camera.rotation.order = 'YXZ';
-        scene.add(camera); 
+        scene.add(camera);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.shadowMap.enabled = true;
         document.body.appendChild(renderer.domElement);
 
-        // 2. LIGHTING & REALISTIC FLASHLIGHT
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
-        scene.add(ambientLight);
-        
-        const sunLight = new THREE.DirectionalLight(0xffffff, 0.4);
-        sunLight.position.set(50, 100, 50);
-        scene.add(sunLight);
+        // --- AUDIO SETUP ---
+        const listener = new THREE.AudioListener();
+        camera.add(listener);
 
-        // Narrowed the angle (Math.PI / 12) and added penumbra (0.8) for soft edges
-        const flashlight = new THREE.SpotLight(0xffffff, 6, 400, Math.PI / 12, 0.8, 1);
-        flashlight.position.set(0, 0, 0);
-        flashlight.target.position.set(0, 0, -1); 
-        camera.add(flashlight);
-        camera.add(flashlight.target);
-        flashlight.visible = false; 
+        const music = new THREE.Audio(listener);
+        const shootSound = new THREE.Audio(listener);
+        const runSound = new THREE.Audio(listener);
+        const audioLoader = new THREE.AudioLoader();
 
-        document.getElementById('btn-flash').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            flashlight.visible = !flashlight.visible;
-            // Spooky Night Mode effect
-            ambientLight.intensity = flashlight.visible ? 0.05 : 0.6;
-            sunLight.intensity = flashlight.visible ? 0.0 : 0.4;
-            scene.background = new THREE.Color(flashlight.visible ? 0x050505 : 0x87CEEB);
-            scene.fog.color.setHex(flashlight.visible ? 0x050505 : 0x87CEEB);
+        // Background Music
+        audioLoader.load('music.mp3', (buffer) => {
+            music.setBuffer(buffer);
+            music.setLoop(true);
+            music.setVolume(0.2); // Low volume
+            music.play();
         });
 
-        // 3. LOAD MAP
-        let mapModel = null;
-        new THREE.GLTFLoader().load('map.glb', (gltf) => {
+        audioLoader.load('shot.mp3', (buffer) => shootSound.setBuffer(buffer));
+        audioLoader.load('run.mp3', (buffer) => {
+            runSound.setBuffer(buffer);
+            runSound.setLoop(true);
+            runSound.setVolume(0.5);
+        });
+
+        // --- LIGHTING (Darkened for Flashlight) ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.05); // Very dark
+        scene.add(ambientLight);
+
+        const flashlight = new THREE.SpotLight(0xffffff, 10, 500, Math.PI / 10, 0.5, 1);
+        flashlight.position.set(0, 0, 0);
+        camera.add(flashlight);
+        camera.add(flashlight.target);
+        flashlight.target.position.set(0, 0, -1);
+        flashlight.visible = true; // Start ON since map is dark
+
+        // --- ASSET LOADING ---
+        const loader = new THREE.GLTFLoader();
+        let mapModel, gunModel;
+
+        // Load Map
+        loader.load('map.glb', (gltf) => {
             mapModel = gltf.scene;
             scene.add(mapModel);
             document.getElementById('loading').style.display = 'none';
         });
 
-        // 4. PLAYER PHYSICS (DWARF FIX)
-        const playerHeight = 40; // Tripled the height! Change this if you are still too short.
-        const playerRadius = 8;  // Wider hit-box for walls
-        
-        const walkSpeed = 1.5;
-        const runSpeed = 4.5;
+        // Load Sniper Gun
+        loader.load('gun.glb', (gltf) => {
+            gunModel = gltf.scene;
+            camera.add(gunModel);
+            
+            // Adjust these values to position the gun in the bottom right
+            gunModel.position.set(0.5, -0.4, -0.8); 
+            gunModel.rotation.y = Math.PI; // Flip if facing wrong way
+            gunModel.scale.set(0.1, 0.1, 0.1); // Adjust scale
+        });
+
+        // --- CONTROLS ---
+        let moveData = { x: 0, z: 0 };
         let isRunning = false;
-
-        let yVelocity = 0;
         let isGrounded = false;
-        const gravity = 0.25; 
-        const jumpStrength = 5.0; 
+        let yVelocity = 0;
+        const playerHeight = 50; 
+        const walkSpeed = 1.5;
+        const runSpeed = 4.0;
 
-        camera.position.set(0, playerHeight + 100, 0);
+        const joystick = nipplejs.create({ zone: document.getElementById('joystick-left'), mode: 'static', position: { left: '80px', bottom: '80px' }, color: 'white' });
+        joystick.on('move', (evt, data) => {
+            moveData.x = Math.cos(data.angle.radian) * Math.min(data.force, 1);
+            moveData.z = Math.sin(data.angle.radian) * Math.min(data.force, 1);
+            if (!runSound.isPlaying) runSound.play();
+        });
+        joystick.on('end', () => { moveData = { x: 0, z: 0 }; runSound.pause(); });
 
         // Action Buttons
-        document.getElementById('btn-jump').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (isGrounded) {
-                yVelocity = jumpStrength;
-                isGrounded = false;
+        document.getElementById('btn-flash').onclick = () => { flashlight.visible = !flashlight.visible; };
+        document.getElementById('btn-run').onclick = () => { isRunning = !isRunning; };
+        document.getElementById('btn-jump').onclick = () => { if(isGrounded) yVelocity = 5; };
+        document.getElementById('btn-shoot').onclick = () => {
+            if (shootSound.isPlaying) shootSound.stop();
+            shootSound.play();
+            // Recoil effect
+            if(gunModel) gunModel.position.z += 0.1; 
+        };
+
+        // Swipe to Look (Right Side)
+        let touchId = null, prevTouch = { x: 0, y: 0 };
+        renderer.domElement.addEventListener('touchstart', (e) => {
+            for(let t of e.changedTouches) if(t.clientX > window.innerWidth/2) { touchId = t.identifier; prevTouch = { x: t.clientX, y: t.clientY }; }
+        });
+        renderer.domElement.addEventListener('touchmove', (e) => {
+            for(let t of e.changedTouches) if(t.identifier === touchId) {
+                camera.rotation.y -= (t.clientX - prevTouch.x) * 0.003;
+                camera.rotation.x -= (t.clientY - prevTouch.y) * 0.003;
+                camera.rotation.x = Math.max(-1.5, Math.min(1.5, camera.rotation.x));
+                prevTouch = { x: t.clientX, y: t.clientY };
             }
         });
 
-        const runBtn = document.getElementById('btn-run');
-        runBtn.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            isRunning = !isRunning;
-            runBtn.style.background = isRunning ? 'rgba(255, 50, 50, 0.6)' : 'rgba(255, 255, 255, 0.2)';
-            runBtn.style.borderColor = isRunning ? 'rgba(255, 100, 100, 0.8)' : 'rgba(255, 255, 255, 0.5)';
-        });
-
-        // 5. JOYSTICK (Dynamic Speed Fix)
-        let moveData = { x: 0, z: 0 };
-        const joystickL = nipplejs.create({
-            zone: document.getElementById('joystick-left'),
-            mode: 'static',
-            position: { left: '60px', bottom: '60px' },
-            color: 'white'
-        });
-
-        joystickL.on('move', (evt, data) => {
-            const angle = data.angle.radian;
-            const force = Math.min(data.force, 1);
-            moveData.x = Math.cos(angle) * force; 
-            moveData.z = Math.sin(angle) * force;
-        });
-        joystickL.on('end', () => { moveData = { x: 0, z: 0 }; });
-
-        // 6. SWIPE TO AIM 
-        let touchId = null;
-        let prevTouch = { x: 0, y: 0 };
-        const canvas = renderer.domElement;
-
-        canvas.addEventListener('touchstart', (e) => {
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                const touch = e.changedTouches[i];
-                if (touch.clientX > window.innerWidth / 2) {
-                    touchId = touch.identifier;
-                    prevTouch = { x: touch.clientX, y: touch.clientY };
-                }
-            }
-        }, { passive: false });
-
-        canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault(); 
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                const touch = e.changedTouches[i];
-                if (touch.identifier === touchId) {
-                    const deltaX = touch.clientX - prevTouch.x;
-                    const deltaY = touch.clientY - prevTouch.y;
-
-                    camera.rotation.y -= deltaX * 0.003; 
-                    camera.rotation.x -= deltaY * 0.003;
-                    
-                    camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, camera.rotation.x));
-                    
-                    prevTouch = { x: touch.clientX, y: touch.clientY };
-                }
-            }
-        }, { passive: false });
-
-        canvas.addEventListener('touchend', (e) => {
-            for (let i = 0; i < e.changedTouches.length; i++) {
-                if (e.changedTouches[i].identifier === touchId) touchId = null;
-            }
-        });
-
-        // 7. PHYSICS & ANIMATION LOOP
-        const floorRaycaster = new THREE.Raycaster();
-        const wallRaycaster = new THREE.Raycaster();
-        const downVector = new THREE.Vector3(0, -1, 0);
-
+        // --- GAME LOOP ---
+        const floorRay = new THREE.Raycaster();
         function animate() {
             requestAnimationFrame(animate);
-
-            if (mapModel) {
-                // Determine current speed
-                const currentSpeed = isRunning ? runSpeed : walkSpeed;
-                const moveX = moveData.x * currentSpeed;
-                const moveZ = moveData.z * currentSpeed;
-
-                // --- A. HORIZONTAL MOVEMENT & WALL COLLISIONS ---
-                if (moveX !== 0 || moveZ !== 0) {
-                    const moveVector = new THREE.Vector3(moveX, 0, -moveZ);
-                    moveVector.applyQuaternion(camera.quaternion); 
-                    moveVector.y = 0; 
-                    moveVector.normalize();
-
-                    wallRaycaster.set(camera.position, moveVector);
-                    const wallHits = wallRaycaster.intersectObject(mapModel, true);
-
-                    if (wallHits.length === 0 || wallHits[0].distance > playerRadius) {
-                        camera.translateX(moveX);
-                        camera.translateZ(-moveZ);
-                    }
-                }
-                
-                // --- B. GRAVITY, JUMPING, & FLOOR COLLISIONS ---
-                yVelocity -= gravity; 
-                camera.position.y += yVelocity;
-
-                floorRaycaster.set(camera.position, downVector);
-                const floorHits = floorRaycaster.intersectObject(mapModel, true);
-
-                if (floorHits.length > 0) {
-                    const distToFloor = floorHits[0].distance;
-
-                    if (distToFloor <= playerHeight && yVelocity <= 0) {
-                        camera.position.y += (playerHeight - distToFloor); 
-                        yVelocity = 0;
-                        isGrounded = true;
-                    } 
-                    else if (distToFloor < playerHeight && isGrounded) {
-                        camera.position.y += (playerHeight - distToFloor);
-                    }
-                    else {
-                        isGrounded = false;
-                    }
-                } else {
-                    isGrounded = false; 
-                }
+            const speed = isRunning ? runSpeed : walkSpeed;
+            
+            if (moveData.x !== 0 || moveData.z !== 0) {
+                camera.translateX(moveData.x * speed);
+                camera.translateZ(-moveData.z * speed);
+                // Adjust run sound speed
+                runSound.setPlaybackRate(isRunning ? 1.5 : 1.0);
             }
 
+            // Simple Recoil Recovery
+            if(gunModel && gunModel.position.z > -0.8) gunModel.position.z -= 0.01;
+
+            // Gravity
+            yVelocity -= 0.2;
+            camera.position.y += yVelocity;
+
+            if (mapModel) {
+                floorRay.set(camera.position, new THREE.Vector3(0,-1,0));
+                const hits = floorRay.intersectObject(mapModel, true);
+                if (hits.length > 0 && hits[0].distance < playerHeight) {
+                    camera.position.y += (playerHeight - hits[0].distance);
+                    yVelocity = 0;
+                    isGrounded = true;
+                } else { isGrounded = false; }
+            }
             renderer.render(scene, camera);
         }
-
         animate();
-
-        // 8. WINDOW RESIZE HANDLING
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
     </script>
 </body>
 </html>
