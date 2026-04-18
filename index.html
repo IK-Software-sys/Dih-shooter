@@ -3,42 +3,25 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, landscape">
-    <title>3D Sniper Explorer</title>
+    <title>3D Sniper - Collision Edition</title>
     <style>
-        body, html { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background-color: #000; touch-action: none; user-select: none; -webkit-user-select: none; }
+        body, html { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background-color: #000; touch-action: none; user-select: none; }
         canvas { display: block; }
         #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
-        
-        /* Crosshair */
-        #crosshair {
-            position: absolute; top: 50%; left: 50%;
-            width: 20px; height: 20px;
-            border: 2px solid rgba(255, 0, 0, 0.8);
-            border-radius: 50%;
-            transform: translate(-50%, -50%);
-            pointer-events: none;
-        }
-
-        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: Arial; color: white; }
-
-        .action-btn {
-            position: absolute; background: rgba(255, 255, 255, 0.2); border: 2px solid white;
-            color: white; font-family: Arial; font-weight: bold; border-radius: 50%;
-            pointer-events: auto; backdrop-filter: blur(4px);
-        }
-
+        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; border: 2px solid red; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-family: sans-serif; }
+        .action-btn { position: absolute; background: rgba(255, 255, 255, 0.2); border: 2px solid white; color: white; font-weight: bold; border-radius: 50%; pointer-events: auto; }
         #joystick-left { position: absolute; bottom: 40px; left: 50px; width: 120px; height: 120px; pointer-events: auto; }
-        #btn-shoot { bottom: 40px; right: 40px; width: 90px; height: 90px; background: rgba(255, 0, 0, 0.3); font-size: 18px; }
+        #btn-shoot { bottom: 40px; right: 40px; width: 90px; height: 90px; background: rgba(255, 0, 0, 0.4); }
         #btn-jump { bottom: 40px; right: 150px; width: 70px; height: 70px; }
         #btn-run { bottom: 130px; right: 40px; width: 60px; height: 60px; }
-        #btn-flash { top: 20px; right: 20px; width: 50px; height: 50px; font-size: 20px; }
+        #btn-flash { top: 20px; right: 20px; width: 50px; height: 50px; }
     </style>
 </head>
 <body>
 
-    <div id="loading">Loading Assets...</div>
+    <div id="loading">Loading World...</div>
     <div id="crosshair"></div>
-    
     <div id="ui-layer">
         <div id="joystick-left"></div>
         <button id="btn-run" class="action-btn">RUN</button>
@@ -52,147 +35,143 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
 
     <script>
+        // 1. SETUP
         const scene = new THREE.Scene();
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
-        camera.rotation.order = 'YXZ';
+        scene.background = new THREE.Color(0x000000); // Pure dark
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 3000);
+        camera.rotation.order = 'YXZ'; // Fixed tilt issue
         scene.add(camera);
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.shadowMap.enabled = true;
+        renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // --- AUDIO SETUP ---
+        // 2. AUDIO (Assumes .mp3 extensions)
         const listener = new THREE.AudioListener();
         camera.add(listener);
-
-        const music = new THREE.Audio(listener);
         const shootSound = new THREE.Audio(listener);
         const runSound = new THREE.Audio(listener);
+        const music = new THREE.Audio(listener);
         const audioLoader = new THREE.AudioLoader();
 
-        // Background Music
-        audioLoader.load('music.mp3', (buffer) => {
-            music.setBuffer(buffer);
-            music.setLoop(true);
-            music.setVolume(0.2); // Low volume
-            music.play();
-        });
+        audioLoader.load('music.mp3', (buffer) => { music.setBuffer(buffer); music.setLoop(true); music.setVolume(0.15); music.play(); });
+        audioLoader.load('shot.mp3', (buffer) => { shootSound.setBuffer(buffer); shootSound.setVolume(0.5); });
+        audioLoader.load('run.mp3', (buffer) => { runSound.setBuffer(buffer); runSound.setLoop(true); runSound.setVolume(0.3); });
 
-        audioLoader.load('shot.mp3', (buffer) => shootSound.setBuffer(buffer));
-        audioLoader.load('run.mp3', (buffer) => {
-            runSound.setBuffer(buffer);
-            runSound.setLoop(true);
-            runSound.setVolume(0.5);
-        });
-
-        // --- LIGHTING (Darkened for Flashlight) ---
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.05); // Very dark
+        // 3. LIGHTS (Flashlight)
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.05); // Very dim global light
         scene.add(ambientLight);
 
-        const flashlight = new THREE.SpotLight(0xffffff, 10, 500, Math.PI / 10, 0.5, 1);
+        const flashlight = new THREE.SpotLight(0xffffff, 8, 600, Math.PI / 12, 0.3, 1);
         flashlight.position.set(0, 0, 0);
         camera.add(flashlight);
-        camera.add(flashlight.target);
         flashlight.target.position.set(0, 0, -1);
-        flashlight.visible = true; // Start ON since map is dark
+        camera.add(flashlight.target);
 
-        // --- ASSET LOADING ---
+        // 4. MODELS
         const loader = new THREE.GLTFLoader();
         let mapModel, gunModel;
 
-        // Load Map
-        loader.load('map.glb', (gltf) => {
-            mapModel = gltf.scene;
-            scene.add(mapModel);
-            document.getElementById('loading').style.display = 'none';
-        });
-
-        // Load Sniper Gun
+        loader.load('map.glb', (gltf) => { mapModel = gltf.scene; scene.add(mapModel); document.getElementById('loading').style.display = 'none'; });
         loader.load('gun.glb', (gltf) => {
             gunModel = gltf.scene;
             camera.add(gunModel);
-            
-            // Adjust these values to position the gun in the bottom right
-            gunModel.position.set(0.5, -0.4, -0.8); 
-            gunModel.rotation.y = Math.PI; // Flip if facing wrong way
-            gunModel.scale.set(0.1, 0.1, 0.1); // Adjust scale
+            gunModel.position.set(0.4, -0.4, -0.7); // Bottom right
+            gunModel.rotation.y = Math.PI; // Adjust if gun is backwards
+            gunModel.scale.set(0.2, 0.2, 0.2);
         });
 
-        // --- CONTROLS ---
+        // 5. PLAYER STATE
         let moveData = { x: 0, z: 0 };
         let isRunning = false;
         let isGrounded = false;
         let yVelocity = 0;
-        const playerHeight = 50; 
-        const walkSpeed = 1.5;
-        const runSpeed = 4.0;
+        const playerHeight = 60; // DWARF FIX: High value for N64 maps
+        const wallBuffer = 15;   // Collision distance from walls
+        const walkSpeed = 2.0;
+        const runSpeed = 5.0;
 
+        // 6. INPUTS
         const joystick = nipplejs.create({ zone: document.getElementById('joystick-left'), mode: 'static', position: { left: '80px', bottom: '80px' }, color: 'white' });
-        joystick.on('move', (evt, data) => {
+        joystick.on('move', (evt, data) => { 
             moveData.x = Math.cos(data.angle.radian) * Math.min(data.force, 1);
             moveData.z = Math.sin(data.angle.radian) * Math.min(data.force, 1);
             if (!runSound.isPlaying) runSound.play();
         });
         joystick.on('end', () => { moveData = { x: 0, z: 0 }; runSound.pause(); });
 
-        // Action Buttons
         document.getElementById('btn-flash').onclick = () => { flashlight.visible = !flashlight.visible; };
-        document.getElementById('btn-run').onclick = () => { isRunning = !isRunning; };
-        document.getElementById('btn-jump').onclick = () => { if(isGrounded) yVelocity = 5; };
-        document.getElementById('btn-shoot').onclick = () => {
-            if (shootSound.isPlaying) shootSound.stop();
-            shootSound.play();
-            // Recoil effect
-            if(gunModel) gunModel.position.z += 0.1; 
-        };
+        document.getElementById('btn-run').onclick = (e) => { isRunning = !isRunning; e.target.style.background = isRunning ? "red" : "rgba(255,255,255,0.2)"; };
+        document.getElementById('btn-jump').onclick = () => { if (isGrounded) yVelocity = 6; };
+        document.getElementById('btn-shoot').onclick = () => { if(shootSound.isPlaying) shootSound.stop(); shootSound.play(); if(gunModel) gunModel.position.z += 0.15; };
 
-        // Swipe to Look (Right Side)
+        // Swipe (Right Side Only)
         let touchId = null, prevTouch = { x: 0, y: 0 };
         renderer.domElement.addEventListener('touchstart', (e) => {
             for(let t of e.changedTouches) if(t.clientX > window.innerWidth/2) { touchId = t.identifier; prevTouch = { x: t.clientX, y: t.clientY }; }
         });
         renderer.domElement.addEventListener('touchmove', (e) => {
             for(let t of e.changedTouches) if(t.identifier === touchId) {
-                camera.rotation.y -= (t.clientX - prevTouch.x) * 0.003;
-                camera.rotation.x -= (t.clientY - prevTouch.y) * 0.003;
-                camera.rotation.x = Math.max(-1.5, Math.min(1.5, camera.rotation.x));
+                camera.rotation.y -= (t.clientX - prevTouch.x) * 0.005;
+                camera.rotation.x -= (t.clientY - prevTouch.y) * 0.005;
+                camera.rotation.x = Math.max(-1.4, Math.min(1.4, camera.rotation.x));
                 prevTouch = { x: t.clientX, y: t.clientY };
             }
         });
 
-        // --- GAME LOOP ---
-        const floorRay = new THREE.Raycaster();
+        // 7. PHYSICS LOOP
+        const raycaster = new THREE.Raycaster();
+        
         function animate() {
             requestAnimationFrame(animate);
             const speed = isRunning ? runSpeed : walkSpeed;
-            
-            if (moveData.x !== 0 || moveData.z !== 0) {
-                camera.translateX(moveData.x * speed);
-                camera.translateZ(-moveData.z * speed);
-                // Adjust run sound speed
-                runSound.setPlaybackRate(isRunning ? 1.5 : 1.0);
-            }
-
-            // Simple Recoil Recovery
-            if(gunModel && gunModel.position.z > -0.8) gunModel.position.z -= 0.01;
-
-            // Gravity
-            yVelocity -= 0.2;
-            camera.position.y += yVelocity;
 
             if (mapModel) {
-                floorRay.set(camera.position, new THREE.Vector3(0,-1,0));
-                const hits = floorRay.intersectObject(mapModel, true);
-                if (hits.length > 0 && hits[0].distance < playerHeight) {
-                    camera.position.y += (playerHeight - hits[0].distance);
-                    yVelocity = 0;
-                    isGrounded = true;
-                } else { isGrounded = false; }
+                // --- WALL COLLISIONS ---
+                if (moveData.x !== 0 || moveData.z !== 0) {
+                    const direction = new THREE.Vector3(moveData.x, 0, -moveData.z).applyQuaternion(camera.quaternion);
+                    direction.y = 0; direction.normalize();
+
+                    raycaster.set(camera.position, direction);
+                    const wallHits = raycaster.intersectObject(mapModel, true);
+
+                    // Only move if no wall is closer than wallBuffer
+                    if (wallHits.length === 0 || wallHits[0].distance > wallBuffer) {
+                        camera.translateX(moveData.x * speed);
+                        camera.translateZ(-moveData.z * speed);
+                    }
+                }
+
+                // --- FLOOR & GRAVITY ---
+                yVelocity -= 0.3; // Gravity pull
+                camera.position.y += yVelocity;
+
+                raycaster.set(camera.position, new THREE.Vector3(0, -1, 0));
+                const floorHits = raycaster.intersectObject(mapModel, true);
+
+                if (floorHits.length > 0) {
+                    const dist = floorHits[0].distance;
+                    if (dist < playerHeight) {
+                        camera.position.y += (playerHeight - dist);
+                        yVelocity = 0;
+                        isGrounded = true;
+                    } else { isGrounded = false; }
+                }
+
+                // Recoil recovery
+                if (gunModel && gunModel.position.z > -0.7) gunModel.position.z -= 0.01;
+                runSound.setPlaybackRate(isRunning ? 1.6 : 1.0);
             }
             renderer.render(scene, camera);
         }
         animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>
