@@ -3,14 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, landscape">
-    <title>3D Map Explorer - Full Mobile Controls</title>
+    <title>3D Map Explorer - Pro Mobile Controls</title>
     <style>
-        /* Landscape Optimization & Base Styles */
         body, html {
             margin: 0; padding: 0;
             width: 100vw; height: 100vh;
             overflow: hidden;
-            background-color: #000; /* Black background (better for flashlight mode) */
+            background-color: #000;
             touch-action: none;
             user-select: none;
             -webkit-user-select: none;
@@ -20,15 +19,13 @@
             width: 100vw; height: 100vh;
         }
         
-        /* UI Overlay */
         #ui-layer {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
-            pointer-events: none; /* Lets touches pass through to canvas when not hitting a button */
+            pointer-events: none;
             z-index: 10;
         }
 
-        /* Loading Screen */
         #loading {
             position: absolute;
             top: 50%; left: 50%;
@@ -39,7 +36,6 @@
             text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
         }
 
-        /* Left Joystick Area */
         #joystick-left {
             position: absolute;
             bottom: 40px; left: 50px;
@@ -47,7 +43,6 @@
             pointer-events: auto;
         }
 
-        /* Action Buttons (Right Side) */
         .action-btn {
             position: absolute;
             background: rgba(255, 255, 255, 0.2);
@@ -58,19 +53,26 @@
             border-radius: 50%;
             pointer-events: auto;
             backdrop-filter: blur(4px);
+            transition: background 0.2s;
         }
-        .action-btn:active { background: rgba(255, 255, 255, 0.5); }
+        .action-btn:active { background: rgba(255, 255, 255, 0.6); }
 
         #btn-jump {
             bottom: 40px; right: 50px;
-            width: 80px; height: 80px;
-            font-size: 18px;
+            width: 70px; height: 70px;
+            font-size: 16px;
+        }
+
+        #btn-run {
+            bottom: 130px; right: 50px;
+            width: 60px; height: 60px;
+            font-size: 14px;
         }
 
         #btn-flash {
             top: 30px; right: 50px;
-            width: 60px; height: 60px;
-            font-size: 24px;
+            width: 50px; height: 50px;
+            font-size: 20px;
         }
     </style>
 </head>
@@ -80,6 +82,7 @@
     
     <div id="ui-layer">
         <div id="joystick-left"></div>
+        <button id="btn-run" class="action-btn">RUN</button>
         <button id="btn-jump" class="action-btn">JUMP</button>
         <button id="btn-flash" class="action-btn">🔦</button>
     </div>
@@ -91,13 +94,13 @@
     <script>
         // 1. SCENE & CAMERA SETUP
         const scene = new THREE.Scene();
-        // Add a nice sky color or fog so the edge of the map fades out smoothly
-        scene.fog = new THREE.FogExp2(0x87CEEB, 0.002);
+        scene.fog = new THREE.FogExp2(0x87CEEB, 0.001);
         scene.background = new THREE.Color(0x87CEEB);
 
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
         
-        // We MUST add the camera to the scene if we want lights attached to it (like a flashlight)
+        // CRITICAL FIX: Forces the camera to rotate Y (left/right) before X (up/down) to stop the tilted "roll" issue.
+        camera.rotation.order = 'YXZ';
         scene.add(camera); 
 
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -105,29 +108,30 @@
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // 2. LIGHTING & FLASHLIGHT
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // Dimmed general light
+        // 2. LIGHTING & REALISTIC FLASHLIGHT
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
         scene.add(ambientLight);
         
-        const sunLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.4);
         sunLight.position.set(50, 100, 50);
         scene.add(sunLight);
 
-        // Flashlight setup
-        const flashlight = new THREE.SpotLight(0xffffff, 2, 200, Math.PI / 6, 0.5, 1);
+        // Narrowed the angle (Math.PI / 12) and added penumbra (0.8) for soft edges
+        const flashlight = new THREE.SpotLight(0xffffff, 6, 400, Math.PI / 12, 0.8, 1);
         flashlight.position.set(0, 0, 0);
-        flashlight.target.position.set(0, 0, -1); // Point flashlight straight ahead
+        flashlight.target.position.set(0, 0, -1); 
         camera.add(flashlight);
         camera.add(flashlight.target);
-        flashlight.visible = false; // Off by default
+        flashlight.visible = false; 
 
         document.getElementById('btn-flash').addEventListener('touchstart', (e) => {
             e.preventDefault();
             flashlight.visible = !flashlight.visible;
-            // Dim the sun and sky if flashlight is on to make it look cool
-            ambientLight.intensity = flashlight.visible ? 0.1 : 0.4;
-            scene.background = new THREE.Color(flashlight.visible ? 0x111111 : 0x87CEEB);
-            scene.fog.color.setHex(flashlight.visible ? 0x111111 : 0x87CEEB);
+            // Spooky Night Mode effect
+            ambientLight.intensity = flashlight.visible ? 0.05 : 0.6;
+            sunLight.intensity = flashlight.visible ? 0.0 : 0.4;
+            scene.background = new THREE.Color(flashlight.visible ? 0x050505 : 0x87CEEB);
+            scene.fog.color.setHex(flashlight.visible ? 0x050505 : 0x87CEEB);
         });
 
         // 3. LOAD MAP
@@ -138,19 +142,22 @@
             document.getElementById('loading').style.display = 'none';
         });
 
-        // 4. PLAYER PHYSICS & SETTINGS
-        const playerHeight = 15;
-        const playerRadius = 4; // Width of player for wall collisions
-        const walkSpeed = 2.0;
+        // 4. PLAYER PHYSICS (DWARF FIX)
+        const playerHeight = 40; // Tripled the height! Change this if you are still too short.
+        const playerRadius = 8;  // Wider hit-box for walls
         
+        const walkSpeed = 1.5;
+        const runSpeed = 4.5;
+        let isRunning = false;
+
         let yVelocity = 0;
         let isGrounded = false;
-        const gravity = 0.2; // Gravity pull
-        const jumpStrength = 4.0; // How high you jump
+        const gravity = 0.25; 
+        const jumpStrength = 5.0; 
 
-        camera.position.set(0, playerHeight + 50, 0);
+        camera.position.set(0, playerHeight + 100, 0);
 
-        // Jump Logic
+        // Action Buttons
         document.getElementById('btn-jump').addEventListener('touchstart', (e) => {
             e.preventDefault();
             if (isGrounded) {
@@ -159,8 +166,16 @@
             }
         });
 
-        // 5. JOYSTICK (Left Side)
-        let moveData = { forward: 0, right: 0 };
+        const runBtn = document.getElementById('btn-run');
+        runBtn.addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            isRunning = !isRunning;
+            runBtn.style.background = isRunning ? 'rgba(255, 50, 50, 0.6)' : 'rgba(255, 255, 255, 0.2)';
+            runBtn.style.borderColor = isRunning ? 'rgba(255, 100, 100, 0.8)' : 'rgba(255, 255, 255, 0.5)';
+        });
+
+        // 5. JOYSTICK (Dynamic Speed Fix)
+        let moveData = { x: 0, z: 0 };
         const joystickL = nipplejs.create({
             zone: document.getElementById('joystick-left'),
             mode: 'static',
@@ -171,12 +186,12 @@
         joystickL.on('move', (evt, data) => {
             const angle = data.angle.radian;
             const force = Math.min(data.force, 1);
-            moveData.right = Math.cos(angle) * force * walkSpeed; 
-            moveData.forward = Math.sin(angle) * force * walkSpeed;
+            moveData.x = Math.cos(angle) * force; 
+            moveData.z = Math.sin(angle) * force;
         });
-        joystickL.on('end', () => { moveData = { forward: 0, right: 0 }; });
+        joystickL.on('end', () => { moveData = { x: 0, z: 0 }; });
 
-        // 6. SWIPE TO AIM (Right Side ONLY)
+        // 6. SWIPE TO AIM 
         let touchId = null;
         let prevTouch = { x: 0, y: 0 };
         const canvas = renderer.domElement;
@@ -184,7 +199,6 @@
         canvas.addEventListener('touchstart', (e) => {
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const touch = e.changedTouches[i];
-                // Only register swipe if it starts on the RIGHT HALF of the screen
                 if (touch.clientX > window.innerWidth / 2) {
                     touchId = touch.identifier;
                     prevTouch = { x: touch.clientX, y: touch.clientY };
@@ -193,18 +207,16 @@
         }, { passive: false });
 
         canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault(); // Stop screen from bouncing
+            e.preventDefault(); 
             for (let i = 0; i < e.changedTouches.length; i++) {
                 const touch = e.changedTouches[i];
                 if (touch.identifier === touchId) {
                     const deltaX = touch.clientX - prevTouch.x;
                     const deltaY = touch.clientY - prevTouch.y;
 
-                    // Adjusted swipe sensitivity and direction
                     camera.rotation.y -= deltaX * 0.003; 
                     camera.rotation.x -= deltaY * 0.003;
                     
-                    // Clamp looking up/down to prevent doing backflips
                     camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, camera.rotation.x));
                     
                     prevTouch = { x: touch.clientX, y: touch.clientY };
@@ -227,31 +239,29 @@
             requestAnimationFrame(animate);
 
             if (mapModel) {
+                // Determine current speed
+                const currentSpeed = isRunning ? runSpeed : walkSpeed;
+                const moveX = moveData.x * currentSpeed;
+                const moveZ = moveData.z * currentSpeed;
+
                 // --- A. HORIZONTAL MOVEMENT & WALL COLLISIONS ---
-                if (moveData.forward !== 0 || moveData.right !== 0) {
-                    // Calculate which way we are trying to walk
-                    const moveVector = new THREE.Vector3(moveData.right, 0, -moveData.forward);
-                    moveVector.applyQuaternion(camera.quaternion); // Match camera facing direction
-                    moveVector.y = 0; // Don't raycast up/down for walls
+                if (moveX !== 0 || moveZ !== 0) {
+                    const moveVector = new THREE.Vector3(moveX, 0, -moveZ);
+                    moveVector.applyQuaternion(camera.quaternion); 
+                    moveVector.y = 0; 
                     moveVector.normalize();
 
-                    // Shoot a laser straight ahead of where we are walking
                     wallRaycaster.set(camera.position, moveVector);
                     const wallHits = wallRaycaster.intersectObject(mapModel, true);
 
-                    // If a wall is in front of us AND it's closer than our player Radius, STOP moving.
-                    if (wallHits.length > 0 && wallHits[0].distance < playerRadius) {
-                        // We hit a wall! Do not translate the camera.
-                    } else {
-                        // Safe to move
-                        camera.translateX(moveData.right);
-                        camera.translateZ(-moveData.forward);
+                    if (wallHits.length === 0 || wallHits[0].distance > playerRadius) {
+                        camera.translateX(moveX);
+                        camera.translateZ(-moveZ);
                     }
                 }
-                camera.rotation.z = 0; // Prevent camera roll
-
+                
                 // --- B. GRAVITY, JUMPING, & FLOOR COLLISIONS ---
-                yVelocity -= gravity; // Always pull down
+                yVelocity -= gravity; 
                 camera.position.y += yVelocity;
 
                 floorRaycaster.set(camera.position, downVector);
@@ -260,22 +270,19 @@
                 if (floorHits.length > 0) {
                     const distToFloor = floorHits[0].distance;
 
-                    // If we hit the ground while falling
                     if (distToFloor <= playerHeight && yVelocity <= 0) {
-                        camera.position.y += (playerHeight - distToFloor); // Snap exactly to floor height
+                        camera.position.y += (playerHeight - distToFloor); 
                         yVelocity = 0;
                         isGrounded = true;
                     } 
-                    // If we are walking up a steep slope/stairs
                     else if (distToFloor < playerHeight && isGrounded) {
                         camera.position.y += (playerHeight - distToFloor);
                     }
                     else {
-                        // We are in the air
                         isGrounded = false;
                     }
                 } else {
-                    isGrounded = false; // Walking off the map
+                    isGrounded = false; 
                 }
             }
 
@@ -293,4 +300,3 @@
     </script>
 </body>
 </html>
-
