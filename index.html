@@ -2,33 +2,33 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>3D Map Explorer - Gravity & Swipe</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, landscape">
+    <title>3D Map Explorer - Full Mobile Controls</title>
     <style>
+        /* Landscape Optimization & Base Styles */
         body, html {
-            margin: 0;
-            padding: 0;
-            width: 100%;
-            height: 100%;
-            overflow: hidden; /* Prevents scrolling */
-            background-color: #87CEEB; /* Sky blue background */
-            touch-action: none; /* Prevents mobile pull-to-refresh */
+            margin: 0; padding: 0;
+            width: 100vw; height: 100vh;
+            overflow: hidden;
+            background-color: #000; /* Black background (better for flashlight mode) */
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
         }
         canvas {
             display: block;
-            width: 100vw;
-            height: 100vh;
-        }
-        /* Single Left Joystick */
-        #joystick-left {
-            position: absolute;
-            bottom: 30px;
-            left: 30px;
-            width: 120px;
-            height: 120px;
-            z-index: 10;
+            width: 100vw; height: 100vh;
         }
         
+        /* UI Overlay */
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; /* Lets touches pass through to canvas when not hitting a button */
+            z-index: 10;
+        }
+
+        /* Loading Screen */
         #loading {
             position: absolute;
             top: 50%; left: 50%;
@@ -36,137 +36,246 @@
             font-family: Arial, sans-serif;
             font-size: 24px;
             color: white;
-            z-index: 20;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+
+        /* Left Joystick Area */
+        #joystick-left {
+            position: absolute;
+            bottom: 40px; left: 50px;
+            width: 120px; height: 120px;
+            pointer-events: auto;
+        }
+
+        /* Action Buttons (Right Side) */
+        .action-btn {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            color: white;
+            font-family: Arial, sans-serif;
+            font-weight: bold;
+            border-radius: 50%;
+            pointer-events: auto;
+            backdrop-filter: blur(4px);
+        }
+        .action-btn:active { background: rgba(255, 255, 255, 0.5); }
+
+        #btn-jump {
+            bottom: 40px; right: 50px;
+            width: 80px; height: 80px;
+            font-size: 18px;
+        }
+
+        #btn-flash {
+            top: 30px; right: 50px;
+            width: 60px; height: 60px;
+            font-size: 24px;
         }
     </style>
 </head>
 <body>
 
     <div id="loading">Loading Map...</div>
-    <div id="joystick-left"></div>
+    
+    <div id="ui-layer">
+        <div id="joystick-left"></div>
+        <button id="btn-jump" class="action-btn">JUMP</button>
+        <button id="btn-flash" class="action-btn">🔦</button>
+    </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
 
     <script>
-        // 1. SCENE SETUP
+        // 1. SCENE & CAMERA SETUP
         const scene = new THREE.Scene();
+        // Add a nice sky color or fog so the edge of the map fades out smoothly
+        scene.fog = new THREE.FogExp2(0x87CEEB, 0.002);
+        scene.background = new THREE.Color(0x87CEEB);
+
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         
+        // We MUST add the camera to the scene if we want lights attached to it (like a flashlight)
+        scene.add(camera); 
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(window.devicePixelRatio); // Sharper graphics on mobile
+        renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        // 2. LIGHTING
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+        // 2. LIGHTING & FLASHLIGHT
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4); // Dimmed general light
         scene.add(ambientLight);
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
-        directionalLight.position.set(10, 20, 10);
-        scene.add(directionalLight);
-
-        // 3. LOAD THE MAP & PREPARE PHYSICS
-        let mapModel = null;
-        const loader = new THREE.GLTFLoader();
         
-        loader.load('map.glb', function (gltf) {
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.5);
+        sunLight.position.set(50, 100, 50);
+        scene.add(sunLight);
+
+        // Flashlight setup
+        const flashlight = new THREE.SpotLight(0xffffff, 2, 200, Math.PI / 6, 0.5, 1);
+        flashlight.position.set(0, 0, 0);
+        flashlight.target.position.set(0, 0, -1); // Point flashlight straight ahead
+        camera.add(flashlight);
+        camera.add(flashlight.target);
+        flashlight.visible = false; // Off by default
+
+        document.getElementById('btn-flash').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            flashlight.visible = !flashlight.visible;
+            // Dim the sun and sky if flashlight is on to make it look cool
+            ambientLight.intensity = flashlight.visible ? 0.1 : 0.4;
+            scene.background = new THREE.Color(flashlight.visible ? 0x111111 : 0x87CEEB);
+            scene.fog.color.setHex(flashlight.visible ? 0x111111 : 0x87CEEB);
+        });
+
+        // 3. LOAD MAP
+        let mapModel = null;
+        new THREE.GLTFLoader().load('map.glb', (gltf) => {
             mapModel = gltf.scene;
             scene.add(mapModel);
             document.getElementById('loading').style.display = 'none';
-        }, undefined, function (error) {
-            console.error('Error loading model:', error);
-            document.getElementById('loading').innerText = "Error loading map. Check console.";
         });
 
-        // 4. PLAYER SETTINGS (Adjust these based on your map's scale)
-        const playerHeight = 15; // How tall the player is above the floor
-        const walkSpeed = 1.5;   // Speed of the joystick movement
-        const fallSpeed = 2.0;   // How fast gravity pulls you down
-        camera.position.set(0, playerHeight + 50, 0); // Drop in from above
+        // 4. PLAYER PHYSICS & SETTINGS
+        const playerHeight = 15;
+        const playerRadius = 4; // Width of player for wall collisions
+        const walkSpeed = 2.0;
+        
+        let yVelocity = 0;
+        let isGrounded = false;
+        const gravity = 0.2; // Gravity pull
+        const jumpStrength = 4.0; // How high you jump
 
-        // 5. MOVEMENT & JOYSTICK SETUP
+        camera.position.set(0, playerHeight + 50, 0);
+
+        // Jump Logic
+        document.getElementById('btn-jump').addEventListener('touchstart', (e) => {
+            e.preventDefault();
+            if (isGrounded) {
+                yVelocity = jumpStrength;
+                isGrounded = false;
+            }
+        });
+
+        // 5. JOYSTICK (Left Side)
         let moveData = { forward: 0, right: 0 };
         const joystickL = nipplejs.create({
             zone: document.getElementById('joystick-left'),
             mode: 'static',
-            position: { left: '80px', bottom: '80px' },
+            position: { left: '60px', bottom: '60px' },
             color: 'white'
         });
 
         joystickL.on('move', (evt, data) => {
             const angle = data.angle.radian;
-            const force = data.force > 1 ? 1 : data.force;
+            const force = Math.min(data.force, 1);
             moveData.right = Math.cos(angle) * force * walkSpeed; 
             moveData.forward = Math.sin(angle) * force * walkSpeed;
         });
         joystickL.on('end', () => { moveData = { forward: 0, right: 0 }; });
 
-        // 6. SWIPE TO AIM SETUP
-        let isDragging = false;
-        let previousTouch = { x: 0, y: 0 };
-
-        // We attach touch events to the canvas so it doesn't interfere with the joystick
+        // 6. SWIPE TO AIM (Right Side ONLY)
+        let touchId = null;
+        let prevTouch = { x: 0, y: 0 };
         const canvas = renderer.domElement;
-        
+
         canvas.addEventListener('touchstart', (e) => {
-            isDragging = true;
-            previousTouch.x = e.touches[0].clientX;
-            previousTouch.y = e.touches[0].clientY;
-        }, { passive: false });
-
-        canvas.addEventListener('touchmove', (e) => {
-            if (isDragging) {
-                const currentTouch = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-                const deltaX = currentTouch.x - previousTouch.x;
-                const deltaY = currentTouch.y - previousTouch.y;
-
-                // Adjust sensitivity here (0.005)
-                camera.rotation.y -= deltaX * 0.005;
-                camera.rotation.x -= deltaY * 0.005;
-                
-                // Clamp looking up and down so you don't break your neck
-                camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
-
-                previousTouch = currentTouch;
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                // Only register swipe if it starts on the RIGHT HALF of the screen
+                if (touch.clientX > window.innerWidth / 2) {
+                    touchId = touch.identifier;
+                    prevTouch = { x: touch.clientX, y: touch.clientY };
+                }
             }
         }, { passive: false });
 
-        canvas.addEventListener('touchend', () => { isDragging = false; });
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault(); // Stop screen from bouncing
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                if (touch.identifier === touchId) {
+                    const deltaX = touch.clientX - prevTouch.x;
+                    const deltaY = touch.clientY - prevTouch.y;
 
-        // 7. GRAVITY & ANIMATION LOOP
-        const raycaster = new THREE.Raycaster();
+                    // Adjusted swipe sensitivity and direction
+                    camera.rotation.y -= deltaX * 0.003; 
+                    camera.rotation.x -= deltaY * 0.003;
+                    
+                    // Clamp looking up/down to prevent doing backflips
+                    camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, camera.rotation.x));
+                    
+                    prevTouch = { x: touch.clientX, y: touch.clientY };
+                }
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === touchId) touchId = null;
+            }
+        });
+
+        // 7. PHYSICS & ANIMATION LOOP
+        const floorRaycaster = new THREE.Raycaster();
+        const wallRaycaster = new THREE.Raycaster();
         const downVector = new THREE.Vector3(0, -1, 0);
 
         function animate() {
             requestAnimationFrame(animate);
 
-            // Handle horizontal movement
-            camera.translateX(moveData.right);
-            camera.translateZ(-moveData.forward);
-            camera.rotation.z = 0; // Prevent camera roll
-
-            // Handle Gravity & Floor Collisions
             if (mapModel) {
-                // Shoot a laser straight down from the camera
-                raycaster.set(camera.position, downVector);
-                // Check what the laser hits on the map
-                const intersects = raycaster.intersectObject(mapModel, true);
+                // --- A. HORIZONTAL MOVEMENT & WALL COLLISIONS ---
+                if (moveData.forward !== 0 || moveData.right !== 0) {
+                    // Calculate which way we are trying to walk
+                    const moveVector = new THREE.Vector3(moveData.right, 0, -moveData.forward);
+                    moveVector.applyQuaternion(camera.quaternion); // Match camera facing direction
+                    moveVector.y = 0; // Don't raycast up/down for walls
+                    moveVector.normalize();
 
-                if (intersects.length > 0) {
-                    const distanceToFloor = intersects[0].distance;
+                    // Shoot a laser straight ahead of where we are walking
+                    wallRaycaster.set(camera.position, moveVector);
+                    const wallHits = wallRaycaster.intersectObject(mapModel, true);
 
-                    if (distanceToFloor < playerHeight) {
-                        // We are too low (walking up a hill or stairs), push up
-                        camera.position.y += (playerHeight - distanceToFloor);
-                    } else if (distanceToFloor > playerHeight + 0.5) {
-                        // We are too high (falling)
-                        camera.position.y -= fallSpeed;
+                    // If a wall is in front of us AND it's closer than our player Radius, STOP moving.
+                    if (wallHits.length > 0 && wallHits[0].distance < playerRadius) {
+                        // We hit a wall! Do not translate the camera.
+                    } else {
+                        // Safe to move
+                        camera.translateX(moveData.right);
+                        camera.translateZ(-moveData.forward);
+                    }
+                }
+                camera.rotation.z = 0; // Prevent camera roll
+
+                // --- B. GRAVITY, JUMPING, & FLOOR COLLISIONS ---
+                yVelocity -= gravity; // Always pull down
+                camera.position.y += yVelocity;
+
+                floorRaycaster.set(camera.position, downVector);
+                const floorHits = floorRaycaster.intersectObject(mapModel, true);
+
+                if (floorHits.length > 0) {
+                    const distToFloor = floorHits[0].distance;
+
+                    // If we hit the ground while falling
+                    if (distToFloor <= playerHeight && yVelocity <= 0) {
+                        camera.position.y += (playerHeight - distToFloor); // Snap exactly to floor height
+                        yVelocity = 0;
+                        isGrounded = true;
+                    } 
+                    // If we are walking up a steep slope/stairs
+                    else if (distToFloor < playerHeight && isGrounded) {
+                        camera.position.y += (playerHeight - distToFloor);
+                    }
+                    else {
+                        // We are in the air
+                        isGrounded = false;
                     }
                 } else {
-                    // If the laser hits nothing (we walked off the edge of the map), keep falling
-                    camera.position.y -= fallSpeed;
+                    isGrounded = false; // Walking off the map
                 }
             }
 
@@ -175,7 +284,7 @@
 
         animate();
 
-        // 8. HANDLE WINDOW RESIZING
+        // 8. WINDOW RESIZE HANDLING
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
@@ -184,3 +293,4 @@
     </script>
 </body>
 </html>
+
