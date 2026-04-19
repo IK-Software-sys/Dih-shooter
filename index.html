@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, landscape">
-    <title>3D FPS Map Explorer</title>
+    <title>3D FPS - Pro Movement</title>
     <style>
         body, html {
             margin: 0; padding: 0;
             width: 100vw; height: 100vh;
             overflow: hidden;
-            background-color: #050505; /* Start dark */
+            background-color: #87CEEB;
             touch-action: none;
             user-select: none;
             -webkit-user-select: none;
@@ -36,7 +36,17 @@
             text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
         }
 
-        /* Crosshair */
+        /* Screen effect for dashing */
+        #speed-effect {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, transparent 40%, rgba(255, 255, 255, 0.4) 100%);
+            opacity: 0;
+            transition: opacity 0.1s ease-out;
+            pointer-events: none;
+            z-index: 5;
+        }
+
         #crosshair {
             position: absolute;
             top: 50%; left: 50%;
@@ -64,21 +74,21 @@
             border-radius: 50%;
             pointer-events: auto;
             backdrop-filter: blur(4px);
-            transition: background 0.2s;
+            transition: background 0.2s, opacity 0.2s;
         }
         .action-btn:active { background: rgba(255, 255, 255, 0.6); }
 
-        /* Button Positioning Stacked on the Right */
         #btn-jump {
             bottom: 40px; right: 50px;
             width: 70px; height: 70px;
             font-size: 14px;
         }
 
-        #btn-run {
+        #btn-dash {
             bottom: 125px; right: 50px;
             width: 60px; height: 60px;
-            font-size: 14px;
+            font-size: 12px;
+            background: rgba(100, 200, 255, 0.3);
         }
 
         #btn-shoot {
@@ -90,24 +100,19 @@
         }
         #btn-shoot:active { background: rgba(255, 50, 50, 0.8); }
 
-        #btn-flash {
-            top: 30px; right: 50px;
-            width: 50px; height: 50px;
-            font-size: 20px;
-        }
     </style>
 </head>
 <body>
 
     <div id="loading">Loading Map & Assets...</div>
+    <div id="speed-effect"></div>
     
     <div id="ui-layer">
         <div id="crosshair">＋</div>
         <div id="joystick-left"></div>
         <button id="btn-shoot" class="action-btn">SHOOT</button>
-        <button id="btn-run" class="action-btn">RUN</button>
+        <button id="btn-dash" class="action-btn">DASH</button>
         <button id="btn-jump" class="action-btn">JUMP</button>
-        <button id="btn-flash" class="action-btn">🔦</button>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -115,13 +120,18 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
 
     <script>
-        // 1. AUDIO SETUP (Must be initialized after first user interaction on mobile)
+        // 1. AUDIO SETUP
         const bgMusic = new Audio('music.mp3');
         bgMusic.loop = true;
-        bgMusic.volume = 0.15; // Low volume background music
+        bgMusic.volume = 0.15;
 
-        const shotSfx = new Audio('shot.mp3');
-        shotSfx.volume = 0.8;
+        // Better Shoot SFX logic (Clones node for overlap & instant sync)
+        const shotSfxSrc = 'shot.mp3';
+        function playShootSound() {
+            const sound = new Audio(shotSfxSrc);
+            sound.volume = 0.8;
+            sound.play().catch(e => console.log(e));
+        }
 
         const runSfx = new Audio('run.mp3');
         runSfx.loop = true;
@@ -136,10 +146,10 @@
         }, { once: true });
 
 
-        // 2. SCENE & CAMERA SETUP
+        // 2. SCENE & CAMERA SETUP (Restored normal lighting)
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x020202, 0.005); // Thick dark fog
-        scene.background = new THREE.Color(0x020202); // Pitch black background
+        scene.fog = new THREE.FogExp2(0x87CEEB, 0.001); 
+        scene.background = new THREE.Color(0x87CEEB); 
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
         camera.rotation.order = 'YXZ';
@@ -150,32 +160,15 @@
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-
-        // 3. LIGHTING & FIXING THE FLASHLIGHT
-        // Make the ambient light extremely low so the map is dark
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.05); 
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
         scene.add(ambientLight);
-
-        // Flashlight configuration
-        const flashlight = new THREE.SpotLight(0xffffff, 2.5, 300, Math.PI / 8, 0.6, 1);
-        // Position slightly in front of camera to prevent clipping with player body/gun
-        flashlight.position.set(0, 0, -1); 
         
-        // CRITICAL FIX: The target must be parented to the camera and pushed forward
-        // so it always looks exactly where the camera is looking.
-        flashlight.target.position.set(0, 0, -20); 
-        
-        camera.add(flashlight);
-        camera.add(flashlight.target);
-        flashlight.visible = true; // Default to ON since map is dark
-
-        document.getElementById('btn-flash').addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            flashlight.visible = !flashlight.visible;
-        });
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.4);
+        sunLight.position.set(50, 100, 50);
+        scene.add(sunLight);
 
 
-        // 4. LOAD ASSETS (MAP & GUN)
+        // 3. LOAD ASSETS (MAP & GUN)
         const loader = new THREE.GLTFLoader();
         let mapModel = null;
         let modelsLoaded = 0;
@@ -187,76 +180,76 @@
             }
         }
 
-        // Load Map
         loader.load('map.glb', (gltf) => {
             mapModel = gltf.scene;
             scene.add(mapModel);
             checkLoading();
-        }, undefined, () => checkLoading()); // Fail safe
+        }, undefined, () => checkLoading());
 
-        // Load Sniper Rifle
         let gunModel = null;
         loader.load('gun.glb', (gltf) => {
             gunModel = gltf.scene;
-            
-            // FPS Positioning: Adjust these values if your gun is too big/small or facing backwards
-            // (x: right, y: up/down, z: forward/back)
             gunModel.position.set(0.6, -0.4, -1.2); 
-            
-            // Depending on how the 3D artist exported the gun, you might need to rotate it.
-            // Example: gunModel.rotation.y = Math.PI; (if it's facing you instead of away)
-            
-            camera.add(gunModel); // Attach to camera so it moves with view
+            camera.add(gunModel); 
             checkLoading();
-        }, undefined, () => checkLoading()); // Fail safe
+        }, undefined, () => checkLoading()); 
 
 
-        // 5. PLAYER PHYSICS & ACTIONS
+        // 4. ADVANCED PLAYER PHYSICS
         const playerHeight = 40; 
         const playerRadius = 8;  
         
-        const walkSpeed = 1.5;
-        const runSpeed = 4.5;
-        let isRunning = false;
-
+        const runSpeed = 4.5; // Always running now
+        const dashMultiplier = 3.5;
+        let currentSpeed = runSpeed;
+        
+        // Movement States
         let yVelocity = 0;
         let isGrounded = false;
+        let jumps = 0; // Double jump counter
         const gravity = 0.25; 
-        const jumpStrength = 5.0; 
+        const jumpStrength = 5.5; 
+
+        // Dash States
+        let dashTimer = 0;
+        let dashCooldown = 0;
 
         camera.position.set(0, playerHeight + 100, 0);
 
         // Actions
         document.getElementById('btn-jump').addEventListener('touchstart', (e) => {
             e.preventDefault();
-            if (isGrounded) {
+            // Allow double jump
+            if (isGrounded || jumps < 2) {
                 yVelocity = jumpStrength;
+                jumps++;
                 isGrounded = false;
             }
         });
 
-        const runBtn = document.getElementById('btn-run');
-        runBtn.addEventListener('touchstart', (e) => {
+        document.getElementById('btn-dash').addEventListener('touchstart', (e) => {
             e.preventDefault();
-            isRunning = !isRunning;
-            runBtn.style.background = isRunning ? 'rgba(255, 255, 255, 0.6)' : 'rgba(255, 255, 255, 0.2)';
+            if (dashCooldown <= 0) {
+                dashTimer = 0.2; // 0.2 seconds dash duration
+                dashCooldown = 3.0; // 3 second cooldown
+                document.getElementById('btn-dash').style.opacity = '0.5';
+                document.getElementById('speed-effect').style.opacity = '1';
+            }
         });
 
         document.getElementById('btn-shoot').addEventListener('touchstart', (e) => {
             e.preventDefault();
-            // Reset sound to 0 so you can spam shoot
-            shotSfx.currentTime = 0;
-            shotSfx.play().catch(e => console.log(e));
+            playShootSound(); // Fixed sync!
 
-            // Optional: Simple visual recoil for the gun
+            // Recoil
             if(gunModel) {
-                gunModel.position.z += 0.2; // kick back
-                setTimeout(() => { gunModel.position.z -= 0.2; }, 100); // return
+                gunModel.position.z += 0.2; 
+                setTimeout(() => { gunModel.position.z -= 0.2; }, 100); 
             }
         });
 
 
-        // 6. JOYSTICK (Movement)
+        // 5. JOYSTICK (Movement)
         let moveData = { x: 0, z: 0 };
         const joystickL = nipplejs.create({
             zone: document.getElementById('joystick-left'),
@@ -274,7 +267,7 @@
         joystickL.on('end', () => { moveData = { x: 0, z: 0 }; });
 
 
-        // 7. SWIPE TO AIM 
+        // 6. SWIPE TO AIM 
         let touchId = null;
         let prevTouch = { x: 0, y: 0 };
         const canvas = renderer.domElement;
@@ -299,7 +292,6 @@
 
                     camera.rotation.y -= deltaX * 0.003; 
                     camera.rotation.x -= deltaY * 0.003;
-                    
                     camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, camera.rotation.x));
                     
                     prevTouch = { x: touch.clientX, y: touch.clientY };
@@ -314,21 +306,50 @@
         });
 
 
-        // 8. PHYSICS & ANIMATION LOOP
+        // 7. PHYSICS & ANIMATION LOOP
         const floorRaycaster = new THREE.Raycaster();
         const wallRaycaster = new THREE.Raycaster();
         const downVector = new THREE.Vector3(0, -1, 0);
+        const clock = new THREE.Clock();
 
         function animate() {
             requestAnimationFrame(animate);
+            const deltaTime = clock.getDelta();
 
             if (mapModel) {
-                const currentSpeed = isRunning ? runSpeed : walkSpeed;
+                // Dash Timer & Cooldown Logic
+                let targetFov = 75; // Default Field of View
+
+                if (dashTimer > 0) {
+                    dashTimer -= deltaTime;
+                    currentSpeed = runSpeed * dashMultiplier;
+                    targetFov = 95; // Warp speed camera effect
+                } else {
+                    currentSpeed = runSpeed;
+                    document.getElementById('speed-effect').style.opacity = '0';
+                }
+
+                // Smoothly Lerp Camera FOV
+                camera.fov += (targetFov - camera.fov) * 0.1;
+                camera.updateProjectionMatrix();
+
+                // Dash Cooldown UI
+                if (dashCooldown > 0) {
+                    dashCooldown -= deltaTime;
+                    const btnDash = document.getElementById('btn-dash');
+                    if (dashCooldown <= 0) {
+                        btnDash.style.opacity = '1.0';
+                        btnDash.innerText = "DASH";
+                    } else {
+                        btnDash.innerText = Math.ceil(dashCooldown) + "s";
+                    }
+                }
+
+                // --- A. HORIZONTAL MOVEMENT & WALL RUN ---
                 const moveX = moveData.x * currentSpeed;
                 const moveZ = moveData.z * currentSpeed;
                 let isMoving = false;
 
-                // --- A. HORIZONTAL MOVEMENT & WALL COLLISIONS ---
                 if (moveX !== 0 || moveZ !== 0) {
                     isMoving = true;
                     const moveVector = new THREE.Vector3(moveX, 0, -moveZ);
@@ -342,17 +363,23 @@
                     if (wallHits.length === 0 || wallHits[0].distance > playerRadius) {
                         camera.translateX(moveX);
                         camera.translateZ(-moveZ);
+                    } else {
+                        // WALL RUN (Slide) LOGIC
+                        if (!isGrounded && yVelocity < 0) {
+                            yVelocity = -0.05; // Slow down fall dramatically
+                            jumps = 0; // Reset jumps so you can jump off the wall!
+                        }
                     }
                 }
                 
-                // --- B. RUNNING SFX LOGIC ---
-                if (isMoving && isRunning && isGrounded && audioUnlocked) {
-                    if (runSfx.paused) runSfx.play().catch(()=>console.log("SFX Blocked"));
+                // --- B. AUDIO SYNC: Constantly Running SFX ---
+                if (isMoving && isGrounded && audioUnlocked) {
+                    if (runSfx.paused) runSfx.play().catch(()=>{});
                 } else {
                     if (!runSfx.paused) runSfx.pause();
                 }
 
-                // --- C. GRAVITY, JUMPING, & FLOOR COLLISIONS ---
+                // --- C. GRAVITY & FLOOR COLLISIONS ---
                 yVelocity -= gravity; 
                 camera.position.y += yVelocity;
 
@@ -366,6 +393,7 @@
                         camera.position.y += (playerHeight - distToFloor); 
                         yVelocity = 0;
                         isGrounded = true;
+                        jumps = 0; // Reset jumps on floor
                     } 
                     else if (distToFloor < playerHeight && isGrounded) {
                         camera.position.y += (playerHeight - distToFloor);
@@ -383,7 +411,7 @@
 
         animate();
 
-        // 9. WINDOW RESIZE HANDLING
+        // 8. WINDOW RESIZE HANDLING
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
