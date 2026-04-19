@@ -3,39 +3,111 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, landscape">
-    <title>3D FPS - Optimized Survival</title>
+    <title>3D FPS - Pro Movement</title>
     <style>
-        body, html { margin: 0; padding: 0; width: 100vw; height: 100vh; overflow: hidden; background-color: #87CEEB; touch-action: none; user-select: none; -webkit-user-select: none; }
-        canvas { display: block; width: 100vw; height: 100vh; }
-        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: flex; flex-direction: column; justify-content: space-between; }
-        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-family: sans-serif; font-size: 20px; color: white; text-shadow: 2px 2px 4px #000; z-index: 100; text-align: center; }
-        #speed-effect { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: repeating-conic-gradient(from 0deg at 50% 50%, rgba(255,255,255,0) 0deg, rgba(255,255,255,0) 5deg, rgba(255,255,255,0.1) 6deg, rgba(255,255,255,0) 7deg); opacity: 0; pointer-events: none; z-index: 5; mask-image: radial-gradient(circle, transparent 40%, black 100%); -webkit-mask-image: radial-gradient(circle, transparent 40%, black 100%); }
-        #hud-top { display: flex; justify-content: space-between; padding: 15px; font-family: sans-serif; color: white; text-shadow: 1px 1px 2px black; }
-        #health-container { width: 150px; height: 15px; background: rgba(0,0,0,0.5); border: 1px solid #fff; border-radius: 5px; }
-        #health-bar { width: 100%; height: 100%; background: #32cd32; transition: width 0.3s; }
-        #crosshair { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #0f0; font-size: 24px; pointer-events: none; }
-        #joystick-left { position: absolute; bottom: 30px; left: 40px; width: 100px; height: 100px; pointer-events: auto; }
-        .action-btn { position: absolute; background: rgba(255, 255, 255, 0.2); border: 2px solid #fff; color: #fff; font-weight: bold; border-radius: 50%; pointer-events: auto; backdrop-filter: blur(4px); }
-        #btn-jump { bottom: 30px; right: 40px; width: 70px; height: 70px; }
-        #btn-dash { bottom: 110px; right: 40px; width: 60px; height: 60px; font-size: 10px; }
-        #btn-shoot { bottom: 180px; right: 40px; width: 70px; height: 70px; background: rgba(255, 50, 50, 0.3); }
-        #hit-flash { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: red; opacity: 0; pointer-events: none; z-index: 20; }
+        body, html {
+            margin: 0; padding: 0;
+            width: 100vw; height: 100vh;
+            overflow: hidden;
+            background-color: #87CEEB;
+            touch-action: none;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        canvas {
+            display: block;
+            width: 100vw; height: 100vh;
+        }
+        
+        #ui-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        #loading {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-family: Arial, sans-serif;
+            font-size: 24px;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+
+        /* Screen effect for dashing */
+        #speed-effect {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, transparent 40%, rgba(255, 255, 255, 0.4) 100%);
+            opacity: 0;
+            transition: opacity 0.1s ease-out;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        #crosshair {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(0, 255, 0, 0.7);
+            font-size: 24px;
+            font-family: sans-serif;
+            pointer-events: none;
+        }
+
+        #joystick-left {
+            position: absolute;
+            bottom: 40px; left: 50px;
+            width: 120px; height: 120px;
+            pointer-events: auto;
+        }
+
+        .action-btn {
+            position: absolute;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            color: white;
+            font-family: Arial, sans-serif;
+            font-weight: bold;
+            border-radius: 50%;
+            pointer-events: auto;
+            backdrop-filter: blur(4px);
+            transition: background 0.2s, opacity 0.2s;
+        }
+        .action-btn:active { background: rgba(255, 255, 255, 0.6); }
+
+        #btn-jump {
+            bottom: 40px; right: 50px;
+            width: 70px; height: 70px;
+            font-size: 14px;
+        }
+
+        #btn-dash {
+            bottom: 125px; right: 50px;
+            width: 60px; height: 60px;
+            font-size: 12px;
+            background: rgba(100, 200, 255, 0.3);
+        }
+
+        #btn-shoot {
+            bottom: 200px; right: 50px;
+            width: 65px; height: 65px;
+            font-size: 12px;
+            background: rgba(255, 100, 100, 0.3);
+            border-color: rgba(255, 100, 100, 0.6);
+        }
+        #btn-shoot:active { background: rgba(255, 50, 50, 0.8); }
+
     </style>
 </head>
 <body>
 
-    <div id="loading">Checking System...<br><small>Ensure model files are in the same folder</small></div>
+    <div id="loading">Loading Map & Assets...</div>
     <div id="speed-effect"></div>
-    <div id="hit-flash"></div>
     
     <div id="ui-layer">
-        <div id="hud-top">
-            <div id="health-container"><div id="health-bar"></div></div>
-            <div style="text-align:right">
-                <div id="wave-text">WAVE 1</div>
-                <div id="ammo-text">AMMO: 10 / 30</div>
-            </div>
-        </div>
         <div id="crosshair">＋</div>
         <div id="joystick-left"></div>
         <button id="btn-shoot" class="action-btn">SHOOT</button>
@@ -48,241 +120,303 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
 
     <script>
-        /** 1. CORE VARIABLES **/
-        let scene, camera, renderer, clock;
-        let mapModel, gunModel, baseEnemyModel, baseAmmoModel;
-        let hp = 100, clipAmmo = 10, reserveAmmo = 30, currentWave = 1;
-        let isDead = false, isReloading = false, lastHitTime = 0;
-        let moveData = { x: 0, z: 0 }, yVelocity = 0, jumps = 0, isGrounded = false;
-        let dashTimer = 0, dashCooldown = 0;
-        const enemies = [], ammoDrops = [], enemiesGroup = new THREE.Group();
-        const playerHeight = 40, runSpeed = 9.0, dashMult = 4.0;
+        // 1. AUDIO SETUP
+        const bgMusic = new Audio('music.mp3');
+        bgMusic.loop = true;
+        bgMusic.volume = 0.15;
 
-        /** 2. OPTIMIZED ASSET LOADER **/
-        const loadingEl = document.getElementById('loading');
-        let assetsToLoad = ['map.glb', 'gun.glb', 'enemy.glb', 'ammo.glb'];
-        let loadedCount = 0;
-
-        function init() {
-            scene = new THREE.Scene();
-            scene.background = new THREE.Color(0x87CEEB);
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 1, 3000);
-            camera.rotation.order = 'YXZ';
-            
-            renderer = new THREE.WebGLRenderer({ antialias: false }); // Performance boost
-            renderer.setPixelRatio(window.devicePixelRatio > 1.5 ? 1.5 : 1); // Cap resolution for mobile
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            document.body.appendChild(renderer.domElement);
-
-            const light = new THREE.AmbientLight(0xffffff, 0.9);
-            scene.add(light);
-            scene.add(enemiesGroup);
-            clock = new THREE.Clock();
-
-            loadAssets();
+        // Better Shoot SFX logic (Clones node for overlap & instant sync)
+        const shotSfxSrc = 'shot.mp3';
+        function playShootSound() {
+            const sound = new Audio(shotSfxSrc);
+            sound.volume = 0.8;
+            sound.play().catch(e => console.log(e));
         }
 
-        function loadAssets() {
-            const loader = new THREE.GLTFLoader();
-            
-            assetsToLoad.forEach((url, index) => {
-                loader.load(url, 
-                    (gltf) => {
-                        if(index === 0) { mapModel = gltf.scene; scene.add(mapModel); }
-                        if(index === 1) { gunModel = gltf.scene; gunModel.position.set(0.6, -0.5, -1); camera.add(gunModel); scene.add(camera); }
-                        if(index === 2) { baseEnemyModel = gltf.scene; }
-                        if(index === 3) { baseAmmoModel = gltf.scene; }
-                        checkProgress();
-                    },
-                    undefined,
-                    (err) => {
-                        console.warn("Failed to load " + url + " - Using placeholder");
-                        createPlaceholder(index);
-                        checkProgress();
-                    }
-                );
-            });
-        }
+        const runSfx = new Audio('run.mp3');
+        runSfx.loop = true;
+        runSfx.volume = 0.5;
 
-        function createPlaceholder(type) {
-            // Type 0: Map (Floor), 2: Enemy, 3: Ammo
-            if(type === 0) {
-                const geo = new THREE.PlaneGeometry(2000, 2000);
-                const mat = new THREE.MeshLambertMaterial({color: 0x444444});
-                mapModel = new THREE.Mesh(geo, mat);
-                mapModel.rotation.x = -Math.PI/2;
-                scene.add(mapModel);
-            } else if(type === 2) {
-                baseEnemyModel = new THREE.Mesh(new THREE.BoxGeometry(10, 20, 10), new THREE.MeshBasicMaterial({color: 0xff0000}));
-            } else if(type === 3) {
-                baseAmmoModel = new THREE.Mesh(new THREE.SphereGeometry(5), new THREE.MeshBasicMaterial({color: 0xffff00}));
+        let audioUnlocked = false;
+        document.body.addEventListener('touchstart', () => {
+            if (!audioUnlocked) {
+                bgMusic.play().catch(e => console.log("Audio autoplay prevented", e));
+                audioUnlocked = true;
+            }
+        }, { once: true });
+
+
+        // 2. SCENE & CAMERA SETUP (Restored normal lighting)
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x87CEEB, 0.001); 
+        scene.background = new THREE.Color(0x87CEEB); 
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
+        camera.rotation.order = 'YXZ';
+        scene.add(camera); 
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.body.appendChild(renderer.domElement);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
+        scene.add(ambientLight);
+        
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.4);
+        sunLight.position.set(50, 100, 50);
+        scene.add(sunLight);
+
+
+        // 3. LOAD ASSETS (MAP & GUN)
+        const loader = new THREE.GLTFLoader();
+        let mapModel = null;
+        let modelsLoaded = 0;
+
+        function checkLoading() {
+            modelsLoaded++;
+            if (modelsLoaded === 2) {
+                document.getElementById('loading').style.display = 'none';
             }
         }
 
-        function checkProgress() {
-            loadedCount++;
-            loadingEl.innerHTML = `Loading Assets (${loadedCount}/4)`;
-            if(loadedCount >= 4) {
-                loadingEl.style.display = 'none';
-                startWave();
-                animate();
-            }
-        }
+        loader.load('map.glb', (gltf) => {
+            mapModel = gltf.scene;
+            scene.add(mapModel);
+            checkLoading();
+        }, undefined, () => checkLoading());
 
-        /** 3. GAMEPLAY LOGIC **/
-        const bgMusic = new Audio('music.mp3'); bgMusic.loop = true; bgMusic.volume = 0.3;
-        const runSfx = new Audio('run.mp3'); runSfx.loop = true;
+        let gunModel = null;
+        loader.load('gun.glb', (gltf) => {
+            gunModel = gltf.scene;
+            gunModel.position.set(0.6, -0.4, -1.2); 
+            camera.add(gunModel); 
+            checkLoading();
+        }, undefined, () => checkLoading()); 
 
-        document.body.addEventListener('touchstart', () => { 
-            bgMusic.play().catch(()=>{});
-        }, {once: true});
 
-        function startWave() {
-            const count = 3 + (currentWave * 2);
-            for(let i=0; i<count; i++) setTimeout(spawnEnemy, i * 800);
-            spawnAmmoDrop();
-            updateHUD();
-        }
+        // 4. ADVANCED PLAYER PHYSICS
+        const playerHeight = 40; 
+        const playerRadius = 8;  
+        
+        const runSpeed = 4.5; // Always running now
+        const dashMultiplier = 3.5;
+        let currentSpeed = runSpeed;
+        
+        // Movement States
+        let yVelocity = 0;
+        let isGrounded = false;
+        let jumps = 0; // Double jump counter
+        const gravity = 0.25; 
+        const jumpStrength = 5.5; 
 
-        function spawnEnemy() {
-            if(!baseEnemyModel) return;
-            const enemy = baseEnemyModel.clone();
-            const ang = Math.random() * Math.PI * 2;
-            const d = 150 + Math.random() * 100;
-            enemy.position.set(camera.position.x + Math.cos(ang)*d, 20, camera.position.z + Math.sin(ang)*d);
-            enemy.userData = { hp: 40 + (currentWave * 20), speed: 1.5 + (currentWave * 0.2) };
-            enemiesGroup.add(enemy);
-            enemies.push(enemy);
-        }
+        // Dash States
+        let dashTimer = 0;
+        let dashCooldown = 0;
 
-        function spawnAmmoDrop() {
-            if(!baseAmmoModel) return;
-            const ammo = baseAmmoModel.clone();
-            ammo.position.set(camera.position.x + (Math.random()-0.5)*300, 20, camera.position.z + (Math.random()-0.5)*300);
-            scene.add(ammo);
-            ammoDrops.push(ammo);
-        }
+        camera.position.set(0, playerHeight + 100, 0);
 
-        function updateHUD() {
-            document.getElementById('health-bar').style.width = hp + '%';
-            document.getElementById('ammo-text').innerText = isReloading ? "RELOADING" : `AMMO: ${clipAmmo}/${reserveAmmo}`;
-            document.getElementById('wave-text').innerText = `WAVE ${currentWave}`;
-        }
-
-        /** 4. CONTROLS **/
-        nipplejs.create({zone:document.getElementById('joystick-left'), mode:'static', position:{left:'50px', bottom:'50px'}, color:'white'})
-            .on('move', (e, d) => { moveData.x = Math.cos(d.angle.radian)*d.force; moveData.z = Math.sin(d.angle.radian)*d.force; })
-            .on('end', () => { moveData = {x:0, z:0}; });
-
+        // Actions
         document.getElementById('btn-jump').addEventListener('touchstart', (e) => {
-            e.preventDefault(); if(isGrounded || jumps < 2) { yVelocity = 5.5; jumps++; isGrounded = false; }
+            e.preventDefault();
+            // Allow double jump
+            if (isGrounded || jumps < 2) {
+                yVelocity = jumpStrength;
+                jumps++;
+                isGrounded = false;
+            }
         });
 
         document.getElementById('btn-dash').addEventListener('touchstart', (e) => {
-            e.preventDefault(); if(dashCooldown <= 0) { dashTimer = 0.4; dashCooldown = 3.0; }
+            e.preventDefault();
+            if (dashCooldown <= 0) {
+                dashTimer = 0.2; // 0.2 seconds dash duration
+                dashCooldown = 3.0; // 3 second cooldown
+                document.getElementById('btn-dash').style.opacity = '0.5';
+                document.getElementById('speed-effect').style.opacity = '1';
+            }
         });
 
         document.getElementById('btn-shoot').addEventListener('touchstart', (e) => {
-            e.preventDefault(); if(isReloading || isDead) return;
-            if(clipAmmo > 0) {
-                clipAmmo--; new Audio('shot.mp3').play().catch(()=>{});
-                updateHUD();
-                const ray = new THREE.Raycaster();
-                ray.setFromCamera(new THREE.Vector2(0,0), camera);
-                const hits = ray.intersectObjects(enemiesGroup.children, true);
-                if(hits.length > 0) {
-                    let obj = hits[0].object; while(obj.parent && obj.parent !== enemiesGroup) obj = obj.parent;
-                    obj.userData.hp -= 35;
-                    if(obj.userData.hp <= 0) { 
-                        enemiesGroup.remove(obj); 
-                        enemies.splice(enemies.indexOf(obj), 1);
-                        if(enemiesGroup.children.length === 0) { currentWave++; setTimeout(startWave, 2000); }
-                    }
+            e.preventDefault();
+            playShootSound(); // Fixed sync!
+
+            // Recoil
+            if(gunModel) {
+                gunModel.position.z += 0.2; 
+                setTimeout(() => { gunModel.position.z -= 0.2; }, 100); 
+            }
+        });
+
+
+        // 5. JOYSTICK (Movement)
+        let moveData = { x: 0, z: 0 };
+        const joystickL = nipplejs.create({
+            zone: document.getElementById('joystick-left'),
+            mode: 'static',
+            position: { left: '60px', bottom: '60px' },
+            color: 'white'
+        });
+
+        joystickL.on('move', (evt, data) => {
+            const angle = data.angle.radian;
+            const force = Math.min(data.force, 1);
+            moveData.x = Math.cos(angle) * force; 
+            moveData.z = Math.sin(angle) * force;
+        });
+        joystickL.on('end', () => { moveData = { x: 0, z: 0 }; });
+
+
+        // 6. SWIPE TO AIM 
+        let touchId = null;
+        let prevTouch = { x: 0, y: 0 };
+        const canvas = renderer.domElement;
+
+        canvas.addEventListener('touchstart', (e) => {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                if (touch.clientX > window.innerWidth / 2) {
+                    touchId = touch.identifier;
+                    prevTouch = { x: touch.clientX, y: touch.clientY };
                 }
-            } else if(reserveAmmo > 0) {
-                isReloading = true; updateHUD();
-                setTimeout(() => { 
-                    let fill = Math.min(10, reserveAmmo); clipAmmo = fill; reserveAmmo -= fill; 
-                    isReloading = false; updateHUD(); 
-                }, 1500);
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault(); 
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                const touch = e.changedTouches[i];
+                if (touch.identifier === touchId) {
+                    const deltaX = touch.clientX - prevTouch.x;
+                    const deltaY = touch.clientY - prevTouch.y;
+
+                    camera.rotation.y -= deltaX * 0.003; 
+                    camera.rotation.x -= deltaY * 0.003;
+                    camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, camera.rotation.x));
+                    
+                    prevTouch = { x: touch.clientX, y: touch.clientY };
+                }
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', (e) => {
+            for (let i = 0; i < e.changedTouches.length; i++) {
+                if (e.changedTouches[i].identifier === touchId) touchId = null;
             }
         });
 
-        // Swipe Look
-        let tId = null, pT = {x:0, y:0};
-        window.addEventListener('touchstart', e => { 
-            const t = e.touches[0]; if(t.clientX > window.innerWidth/2) { tId = t.identifier; pT = {x:t.clientX, y:t.clientY}; }
-        });
-        window.addEventListener('touchmove', e => {
-            if(!tId) return; const t = Array.from(e.touches).find(v => v.identifier === tId);
-            if(t) {
-                camera.rotation.y -= (t.clientX - pT.x) * 0.005;
-                camera.rotation.x -= (t.clientY - pT.y) * 0.005;
-                camera.rotation.x = Math.max(-1.5, Math.min(1.5, camera.rotation.x));
-                pT = {x:t.clientX, y:t.clientY};
-            }
-        });
 
-        /** 5. ANIMATION LOOP **/
+        // 7. PHYSICS & ANIMATION LOOP
+        const floorRaycaster = new THREE.Raycaster();
+        const wallRaycaster = new THREE.Raycaster();
+        const downVector = new THREE.Vector3(0, -1, 0);
+        const clock = new THREE.Clock();
+
         function animate() {
             requestAnimationFrame(animate);
-            const dt = clock.getDelta();
-            const now = Date.now();
+            const deltaTime = clock.getDelta();
 
-            if(isDead) return;
+            if (mapModel) {
+                // Dash Timer & Cooldown Logic
+                let targetFov = 75; // Default Field of View
 
-            // Health Regen
-            if(hp < 100 && now - lastHitTime > 5000) { hp = Math.min(100, hp + 10 * dt); updateHUD(); }
+                if (dashTimer > 0) {
+                    dashTimer -= deltaTime;
+                    currentSpeed = runSpeed * dashMultiplier;
+                    targetFov = 95; // Warp speed camera effect
+                } else {
+                    currentSpeed = runSpeed;
+                    document.getElementById('speed-effect').style.opacity = '0';
+                }
 
-            // Dash Logic
-            let speed = runSpeed;
-            if(dashTimer > 0) { 
-                dashTimer -= dt; speed *= dashMult; 
-                document.getElementById('speed-effect').style.opacity = 1;
-                camera.fov = 95;
-            } else { 
-                document.getElementById('speed-effect').style.opacity = moveData.x ? 0.3 : 0;
-                camera.fov = 75;
+                // Smoothly Lerp Camera FOV
+                camera.fov += (targetFov - camera.fov) * 0.1;
+                camera.updateProjectionMatrix();
+
+                // Dash Cooldown UI
+                if (dashCooldown > 0) {
+                    dashCooldown -= deltaTime;
+                    const btnDash = document.getElementById('btn-dash');
+                    if (dashCooldown <= 0) {
+                        btnDash.style.opacity = '1.0';
+                        btnDash.innerText = "DASH";
+                    } else {
+                        btnDash.innerText = Math.ceil(dashCooldown) + "s";
+                    }
+                }
+
+                // --- A. HORIZONTAL MOVEMENT & WALL RUN ---
+                const moveX = moveData.x * currentSpeed;
+                const moveZ = moveData.z * currentSpeed;
+                let isMoving = false;
+
+                if (moveX !== 0 || moveZ !== 0) {
+                    isMoving = true;
+                    const moveVector = new THREE.Vector3(moveX, 0, -moveZ);
+                    moveVector.applyQuaternion(camera.quaternion); 
+                    moveVector.y = 0; 
+                    moveVector.normalize();
+
+                    wallRaycaster.set(camera.position, moveVector);
+                    const wallHits = wallRaycaster.intersectObject(mapModel, true);
+
+                    if (wallHits.length === 0 || wallHits[0].distance > playerRadius) {
+                        camera.translateX(moveX);
+                        camera.translateZ(-moveZ);
+                    } else {
+                        // WALL RUN (Slide) LOGIC
+                        if (!isGrounded && yVelocity < 0) {
+                            yVelocity = -0.05; // Slow down fall dramatically
+                            jumps = 0; // Reset jumps so you can jump off the wall!
+                        }
+                    }
+                }
+                
+                // --- B. AUDIO SYNC: Constantly Running SFX ---
+                if (isMoving && isGrounded && audioUnlocked) {
+                    if (runSfx.paused) runSfx.play().catch(()=>{});
+                } else {
+                    if (!runSfx.paused) runSfx.pause();
+                }
+
+                // --- C. GRAVITY & FLOOR COLLISIONS ---
+                yVelocity -= gravity; 
+                camera.position.y += yVelocity;
+
+                floorRaycaster.set(camera.position, downVector);
+                const floorHits = floorRaycaster.intersectObject(mapModel, true);
+
+                if (floorHits.length > 0) {
+                    const distToFloor = floorHits[0].distance;
+
+                    if (distToFloor <= playerHeight && yVelocity <= 0) {
+                        camera.position.y += (playerHeight - distToFloor); 
+                        yVelocity = 0;
+                        isGrounded = true;
+                        jumps = 0; // Reset jumps on floor
+                    } 
+                    else if (distToFloor < playerHeight && isGrounded) {
+                        camera.position.y += (playerHeight - distToFloor);
+                    }
+                    else {
+                        isGrounded = false;
+                    }
+                } else {
+                    isGrounded = false; 
+                }
             }
-            camera.updateProjectionMatrix();
-            if(dashCooldown > 0) dashCooldown -= dt;
-
-            // Movement
-            if(moveData.x || moveData.z) {
-                const dir = new THREE.Vector3(moveData.x, 0, -moveData.z).applyQuaternion(camera.quaternion);
-                dir.y = 0; dir.normalize();
-                camera.position.addScaledVector(dir, speed * dt * 10);
-                if(isGrounded && runSfx.paused) runSfx.play().catch(()=>{});
-            } else { runSfx.pause(); }
-
-            // Physics
-            yVelocity -= 0.25; camera.position.y += yVelocity;
-            if(camera.position.y < playerHeight) { camera.position.y = playerHeight; yVelocity = 0; isGrounded = true; jumps = 0; }
-
-            // Enemies AI
-            enemies.forEach(en => {
-                en.lookAt(camera.position.x, en.position.y, camera.position.z);
-                en.translateZ(en.userData.speed);
-                if(en.position.distanceTo(camera.position) < 25 && now - lastHitTime > 1000) {
-                    hp -= 15; lastHitTime = now; updateHUD();
-                    document.getElementById('hit-flash').style.opacity = 0.5;
-                    setTimeout(() => document.getElementById('hit-flash').style.opacity = 0, 100);
-                    if(hp <= 0) { isDead = true; loadingEl.style.display = 'block'; loadingEl.innerHTML = "GAME OVER"; }
-                }
-            });
-
-            // Ammo Pickups
-            ammoDrops.forEach((am, i) => {
-                am.rotation.y += 0.05;
-                if(am.position.distanceTo(camera.position) < 30) {
-                    reserveAmmo += 20; updateHUD(); scene.remove(am); ammoDrops.splice(i,1);
-                }
-            });
 
             renderer.render(scene, camera);
         }
 
-        window.onload = init;
+        animate();
+
+        // 8. WINDOW RESIZE HANDLING
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>
