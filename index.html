@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, landscape">
-    <title>3D FPS - Pro Movement</title>
+    <title>3D FPS - Survival Mode</title>
     <style>
         body, html {
             margin: 0; padding: 0;
@@ -24,6 +24,9 @@
             top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none;
             z-index: 10;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
         }
 
         #loading {
@@ -34,19 +37,58 @@
             font-size: 24px;
             color: white;
             text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            z-index: 50;
         }
 
-        /* Screen effect for dashing */
+        /* Screen effects for speed/dash */
         #speed-effect {
             position: absolute;
             top: 0; left: 0; width: 100%; height: 100%;
-            background: radial-gradient(circle, transparent 40%, rgba(255, 255, 255, 0.4) 100%);
+            /* Radial blur effect simulation */
+            backdrop-filter: blur(0px);
+            /* Speed lines pattern */
+            background: repeating-conic-gradient(
+                from 0deg at 50% 50%,
+                rgba(255, 255, 255, 0) 0deg,
+                rgba(255, 255, 255, 0) 5deg,
+                rgba(255, 255, 255, 0.15) 6deg,
+                rgba(255, 255, 255, 0) 7deg
+            );
             opacity: 0;
-            transition: opacity 0.1s ease-out;
+            transition: opacity 0.2s ease-out, backdrop-filter 0.2s ease-out;
             pointer-events: none;
             z-index: 5;
+            mask-image: radial-gradient(circle, transparent 30%, black 100%);
+            -webkit-mask-image: radial-gradient(circle, transparent 30%, black 100%);
         }
 
+        /* HUD elements */
+        #hud-top {
+            display: flex;
+            justify-content: space-between;
+            padding: 20px;
+            font-family: Arial, sans-serif;
+            color: white;
+            text-shadow: 1px 1px 2px black;
+        }
+
+        #health-container {
+            width: 200px;
+            height: 20px;
+            background: rgba(0,0,0,0.5);
+            border: 2px solid white;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        #health-bar {
+            width: 100%;
+            height: 100%;
+            background: limegreen;
+            transition: width 0.2s, background 0.2s;
+        }
+
+        #stats { text-align: right; font-size: 18px; font-weight: bold; }
+        
         #crosshair {
             position: absolute;
             top: 50%; left: 50%;
@@ -78,36 +120,33 @@
         }
         .action-btn:active { background: rgba(255, 255, 255, 0.6); }
 
-        #btn-jump {
-            bottom: 40px; right: 50px;
-            width: 70px; height: 70px;
-            font-size: 14px;
-        }
-
-        #btn-dash {
-            bottom: 125px; right: 50px;
-            width: 60px; height: 60px;
-            font-size: 12px;
-            background: rgba(100, 200, 255, 0.3);
-        }
-
-        #btn-shoot {
-            bottom: 200px; right: 50px;
-            width: 65px; height: 65px;
-            font-size: 12px;
-            background: rgba(255, 100, 100, 0.3);
-            border-color: rgba(255, 100, 100, 0.6);
-        }
+        #btn-jump { bottom: 40px; right: 50px; width: 70px; height: 70px; font-size: 14px; }
+        #btn-dash { bottom: 125px; right: 50px; width: 60px; height: 60px; font-size: 12px; background: rgba(100, 200, 255, 0.3); }
+        #btn-shoot { bottom: 200px; right: 50px; width: 65px; height: 65px; font-size: 12px; background: rgba(255, 100, 100, 0.3); border-color: rgba(255, 100, 100, 0.6); }
         #btn-shoot:active { background: rgba(255, 50, 50, 0.8); }
+        
+        #hit-flash {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: red; opacity: 0; pointer-events: none; z-index: 20;
+            transition: opacity 0.1s;
+        }
 
     </style>
 </head>
 <body>
 
-    <div id="loading">Loading Map & Assets...</div>
+    <div id="loading">Loading Assets (0/4)...</div>
     <div id="speed-effect"></div>
+    <div id="hit-flash"></div>
     
     <div id="ui-layer">
+        <div id="hud-top">
+            <div id="health-container"><div id="health-bar"></div></div>
+            <div id="stats">
+                <div id="wave-text">WAVE 1</div>
+                <div id="ammo-text">AMMO: 10 / 30</div>
+            </div>
+        </div>
         <div id="crosshair">＋</div>
         <div id="joystick-left"></div>
         <button id="btn-shoot" class="action-btn">SHOOT</button>
@@ -120,35 +159,31 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.1/nipplejs.min.js"></script>
 
     <script>
-        // 1. AUDIO SETUP
+        // --- 1. AUDIO SETUP ---
         const bgMusic = new Audio('music.mp3');
         bgMusic.loop = true;
-        bgMusic.volume = 0.15;
+        bgMusic.volume = 0.25;
 
-        // Better Shoot SFX logic (Clones node for overlap & instant sync)
-        const shotSfxSrc = 'shot.mp3';
         function playShootSound() {
-            const sound = new Audio(shotSfxSrc);
+            const sound = new Audio('shot.mp3');
             sound.volume = 0.8;
             sound.play().catch(e => console.log(e));
         }
 
         const runSfx = new Audio('run.mp3');
-        runSfx.loop = true;
-        runSfx.volume = 0.5;
+        runSfx.loop = true; runSfx.volume = 0.5;
 
         let audioUnlocked = false;
         document.body.addEventListener('touchstart', () => {
             if (!audioUnlocked) {
-                bgMusic.play().catch(e => console.log("Audio autoplay prevented", e));
+                bgMusic.play().catch(e => console.log("Autoplay prevented", e));
                 audioUnlocked = true;
             }
         }, { once: true });
 
 
-        // 2. SCENE & CAMERA SETUP (Restored normal lighting)
+        // --- 2. SCENE SETUP (NO FOG, HIGH VISIBILITY) ---
         const scene = new THREE.Scene();
-        scene.fog = new THREE.FogExp2(0x87CEEB, 0.001); 
         scene.background = new THREE.Color(0x87CEEB); 
 
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 2000);
@@ -160,96 +195,243 @@
         renderer.setPixelRatio(window.devicePixelRatio);
         document.body.appendChild(renderer.domElement);
 
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); 
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); // Brighter
         scene.add(ambientLight);
-        
-        const sunLight = new THREE.DirectionalLight(0xffffff, 0.4);
-        sunLight.position.set(50, 100, 50);
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.6);
+        sunLight.position.set(100, 200, 100);
         scene.add(sunLight);
 
 
-        // 3. LOAD ASSETS (MAP & GUN)
+        // --- 3. ASSET LOADING ---
         const loader = new THREE.GLTFLoader();
-        let mapModel = null;
+        let mapModel = null, gunModel = null, baseEnemyModel = null, baseAmmoModel = null;
         let modelsLoaded = 0;
+        const totalModels = 4;
 
         function checkLoading() {
             modelsLoaded++;
-            if (modelsLoaded === 2) {
+            document.getElementById('loading').innerText = `Loading Assets (${modelsLoaded}/${totalModels})...`;
+            if (modelsLoaded === totalModels) {
                 document.getElementById('loading').style.display = 'none';
+                startWave(); // Start game
             }
         }
 
-        loader.load('map.glb', (gltf) => {
-            mapModel = gltf.scene;
-            scene.add(mapModel);
-            checkLoading();
-        }, undefined, () => checkLoading());
-
-        let gunModel = null;
-        loader.load('gun.glb', (gltf) => {
-            gunModel = gltf.scene;
+        loader.load('map.glb', (gltf) => { mapModel = gltf.scene; scene.add(mapModel); checkLoading(); });
+        loader.load('gun.glb', (gltf) => { 
+            gunModel = gltf.scene; 
             gunModel.position.set(0.6, -0.4, -1.2); 
             camera.add(gunModel); 
-            checkLoading();
-        }, undefined, () => checkLoading()); 
+            checkLoading(); 
+        });
+        loader.load('enemy.glb', (gltf) => { baseEnemyModel = gltf.scene; checkLoading(); });
+        loader.load('ammo.glb', (gltf) => { baseAmmoModel = gltf.scene; checkLoading(); });
 
 
-        // 4. ADVANCED PLAYER PHYSICS
+        // --- 4. GAME STATE & SYSTEMS ---
+        // Player Stats
+        let hp = 100;
+        const maxHp = 100;
+        let lastHitTime = 0;
+        let isDead = false;
+
+        // Ammo System
+        let clipAmmo = 10;
+        const maxClip = 10;
+        let reserveAmmo = 30;
+        let isReloading = false;
+
+        // Wave System
+        let currentWave = 1;
+        let enemiesAlive = 0;
+        let enemiesToSpawn = 0;
+        const enemies = [];
+        const ammoDrops = [];
+        const enemiesGroup = new THREE.Group();
+        scene.add(enemiesGroup);
+
+        const hpBar = document.getElementById('health-bar');
+        const ammoText = document.getElementById('ammo-text');
+        const waveText = document.getElementById('wave-text');
+
+        function updateHUD() {
+            hpBar.style.width = Math.max(0, hp) + '%';
+            hpBar.style.background = hp > 50 ? 'limegreen' : (hp > 25 ? 'orange' : 'red');
+            if(isReloading) ammoText.innerText = "RELOADING...";
+            else ammoText.innerText = `AMMO: ${clipAmmo} / ${reserveAmmo}`;
+            waveText.innerText = `WAVE ${currentWave}`;
+        }
+
+
+        // --- 5. PLAYER PHYSICS & CONTROLS ---
         const playerHeight = 40; 
         const playerRadius = 8;  
         
-        const runSpeed = 4.5; // Always running now
-        const dashMultiplier = 3.5;
+        // MOVEMENT UPGRADED (Doubled speeds)
+        const runSpeed = 9.0; 
+        const dashMultiplier = 4.0; // Total dash speed = 36.0
         let currentSpeed = runSpeed;
         
-        // Movement States
         let yVelocity = 0;
         let isGrounded = false;
-        let jumps = 0; // Double jump counter
+        let jumps = 0; 
         const gravity = 0.25; 
         const jumpStrength = 5.5; 
 
-        // Dash States
         let dashTimer = 0;
         let dashCooldown = 0;
 
         camera.position.set(0, playerHeight + 100, 0);
 
-        // Actions
+        // UI Controls
         document.getElementById('btn-jump').addEventListener('touchstart', (e) => {
             e.preventDefault();
-            // Allow double jump
-            if (isGrounded || jumps < 2) {
-                yVelocity = jumpStrength;
-                jumps++;
-                isGrounded = false;
-            }
+            if (isGrounded || jumps < 2) { yVelocity = jumpStrength; jumps++; isGrounded = false; }
         });
 
         document.getElementById('btn-dash').addEventListener('touchstart', (e) => {
             e.preventDefault();
             if (dashCooldown <= 0) {
-                dashTimer = 0.2; // 0.2 seconds dash duration
-                dashCooldown = 3.0; // 3 second cooldown
+                dashTimer = 0.4; // Doubled dash duration
+                dashCooldown = 3.0; 
                 document.getElementById('btn-dash').style.opacity = '0.5';
-                document.getElementById('speed-effect').style.opacity = '1';
             }
         });
 
+        const raycaster = new THREE.Raycaster();
         document.getElementById('btn-shoot').addEventListener('touchstart', (e) => {
             e.preventDefault();
-            playShootSound(); // Fixed sync!
+            if (isDead || isReloading) return;
 
-            // Recoil
-            if(gunModel) {
-                gunModel.position.z += 0.2; 
-                setTimeout(() => { gunModel.position.z -= 0.2; }, 100); 
+            if (clipAmmo > 0) {
+                clipAmmo--;
+                playShootSound();
+                updateHUD();
+                
+                // Visual Recoil
+                if(gunModel) { gunModel.position.z += 0.2; setTimeout(() => gunModel.position.z -= 0.2, 100); }
+
+                // Raycast Shooting
+                raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+                const hits = raycaster.intersectObjects(enemiesGroup.children, true);
+                
+                if (hits.length > 0) {
+                    // Find root enemy object
+                    let hitObject = hits[0].object;
+                    while (hitObject.parent && hitObject.parent !== enemiesGroup) {
+                        hitObject = hitObject.parent;
+                    }
+                    
+                    if (hitObject.userData.hp) {
+                        hitObject.userData.hp -= 35; // Damage dealt
+                        // Hit indicator (scale up slightly)
+                        hitObject.scale.multiplyScalar(1.1);
+                        setTimeout(() => hitObject.scale.multiplyScalar(0.909), 100);
+
+                        if (hitObject.userData.hp <= 0) killEnemy(hitObject);
+                    }
+                }
+            } else if (reserveAmmo > 0) {
+                // Auto Reload
+                isReloading = true;
+                updateHUD();
+                setTimeout(() => {
+                    const needed = maxClip - clipAmmo;
+                    const amountToLoad = Math.min(needed, reserveAmmo);
+                    clipAmmo += amountToLoad;
+                    reserveAmmo -= amountToLoad;
+                    isReloading = false;
+                    updateHUD();
+                }, 1500);
             }
         });
 
 
-        // 5. JOYSTICK (Movement)
+        // --- 6. ENEMIES & AMMO LOGIC ---
+        function startWave() {
+            enemiesToSpawn = 3 + (currentWave * 2); // Scales up
+            enemiesAlive = enemiesToSpawn;
+            updateHUD();
+            
+            // Spawn ammo at start of round
+            spawnAmmoDrop(); 
+            
+            // Stagger enemy spawns
+            let spawned = 0;
+            const spawnInterval = setInterval(() => {
+                if(spawned >= enemiesToSpawn || isDead) {
+                    clearInterval(spawnInterval);
+                    return;
+                }
+                spawnEnemy();
+                spawned++;
+            }, 1000);
+        }
+
+        function spawnEnemy() {
+            if(!baseEnemyModel) return;
+            const enemy = baseEnemyModel.clone();
+            
+            // Random spawn position around player (distance 100-200)
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 100 + Math.random() * 100;
+            enemy.position.set(
+                camera.position.x + Math.cos(angle) * dist,
+                playerHeight, 
+                camera.position.z + Math.sin(angle) * dist
+            );
+            
+            // Scale stats by wave
+            enemy.userData = {
+                hp: 50 + (currentWave * 20),
+                speed: 1.5 + (currentWave * 0.3),
+                damage: 10 + (currentWave * 2)
+            };
+
+            // Size variation based on health
+            const scale = 1 + (currentWave * 0.05);
+            enemy.scale.set(scale, scale, scale);
+
+            enemiesGroup.add(enemy);
+            enemies.push(enemy);
+        }
+
+        function killEnemy(enemyObj) {
+            enemiesGroup.remove(enemyObj);
+            const index = enemies.indexOf(enemyObj);
+            if (index > -1) enemies.splice(index, 1);
+            
+            // Chance to drop ammo on death
+            if(Math.random() < 0.3) spawnAmmoDrop(enemyObj.position);
+
+            enemiesAlive--;
+            if (enemiesAlive <= 0) {
+                currentWave++;
+                setTimeout(startWave, 2000); // Wait 2s then start next wave
+            }
+        }
+
+        function spawnAmmoDrop(pos = null) {
+            if(!baseAmmoModel) return;
+            const ammo = baseAmmoModel.clone();
+            
+            if (pos) {
+                ammo.position.copy(pos);
+            } else {
+                // Random map spawn
+                ammo.position.set(
+                    camera.position.x + (Math.random() * 200 - 100),
+                    playerHeight, 
+                    camera.position.z + (Math.random() * 200 - 100)
+                );
+            }
+            
+            scene.add(ammo);
+            ammoDrops.push(ammo);
+        }
+
+
+        // --- 7. JOYSTICK & CAMERA MOVEMENT ---
         let moveData = { x: 0, z: 0 };
         const joystickL = nipplejs.create({
             zone: document.getElementById('joystick-left'),
@@ -259,25 +441,20 @@
         });
 
         joystickL.on('move', (evt, data) => {
-            const angle = data.angle.radian;
             const force = Math.min(data.force, 1);
-            moveData.x = Math.cos(angle) * force; 
-            moveData.z = Math.sin(angle) * force;
+            moveData.x = Math.cos(data.angle.radian) * force; 
+            moveData.z = Math.sin(data.angle.radian) * force;
         });
         joystickL.on('end', () => { moveData = { x: 0, z: 0 }; });
 
-
-        // 6. SWIPE TO AIM 
-        let touchId = null;
-        let prevTouch = { x: 0, y: 0 };
+        let touchId = null, prevTouch = { x: 0, y: 0 };
         const canvas = renderer.domElement;
 
         canvas.addEventListener('touchstart', (e) => {
             for (let i = 0; i < e.changedTouches.length; i++) {
-                const touch = e.changedTouches[i];
-                if (touch.clientX > window.innerWidth / 2) {
-                    touchId = touch.identifier;
-                    prevTouch = { x: touch.clientX, y: touch.clientY };
+                if (e.changedTouches[i].clientX > window.innerWidth / 2) {
+                    touchId = e.changedTouches[i].identifier;
+                    prevTouch = { x: e.changedTouches[i].clientX, y: e.changedTouches[i].clientY };
                 }
             }
         }, { passive: false });
@@ -285,16 +462,13 @@
         canvas.addEventListener('touchmove', (e) => {
             e.preventDefault(); 
             for (let i = 0; i < e.changedTouches.length; i++) {
-                const touch = e.changedTouches[i];
-                if (touch.identifier === touchId) {
-                    const deltaX = touch.clientX - prevTouch.x;
-                    const deltaY = touch.clientY - prevTouch.y;
-
+                if (e.changedTouches[i].identifier === touchId) {
+                    const deltaX = e.changedTouches[i].clientX - prevTouch.x;
+                    const deltaY = e.changedTouches[i].clientY - prevTouch.y;
                     camera.rotation.y -= deltaX * 0.003; 
                     camera.rotation.x -= deltaY * 0.003;
                     camera.rotation.x = Math.max(-Math.PI/2 + 0.1, Math.min(Math.PI/2 - 0.1, camera.rotation.x));
-                    
-                    prevTouch = { x: touch.clientX, y: touch.clientY };
+                    prevTouch = { x: e.changedTouches[i].clientX, y: e.changedTouches[i].clientY };
                 }
             }
         }, { passive: false });
@@ -306,46 +480,59 @@
         });
 
 
-        // 7. PHYSICS & ANIMATION LOOP
+        // --- 8. MAIN GAME LOOP ---
         const floorRaycaster = new THREE.Raycaster();
         const wallRaycaster = new THREE.Raycaster();
-        const downVector = new THREE.Vector3(0, -1, 0);
         const clock = new THREE.Clock();
 
         function animate() {
             requestAnimationFrame(animate);
+            if (isDead) return;
+
             const deltaTime = clock.getDelta();
+            const now = Date.now();
+
+            // -- Player Health Regen Logic --
+            if (hp < maxHp && now - lastHitTime > 5000) {
+                hp += 15 * deltaTime; // Regen 15 HP per second
+                if(hp > maxHp) hp = maxHp;
+                updateHUD();
+            }
 
             if (mapModel) {
-                // Dash Timer & Cooldown Logic
-                let targetFov = 75; // Default Field of View
+                // -- Dash & Speed Lines UI Logic --
+                let targetFov = 75; 
+                let speedOpacity = 0;
 
                 if (dashTimer > 0) {
                     dashTimer -= deltaTime;
                     currentSpeed = runSpeed * dashMultiplier;
-                    targetFov = 95; // Warp speed camera effect
+                    targetFov = 100; // Warp FOV
+                    speedOpacity = 1; // Max lines/blur
+                    document.getElementById('speed-effect').style.backdropFilter = "blur(4px)";
                 } else {
                     currentSpeed = runSpeed;
-                    document.getElementById('speed-effect').style.opacity = '0';
+                    document.getElementById('speed-effect').style.backdropFilter = "blur(0px)";
+                    // Show slight speed lines if normally running
+                    if(moveData.x !== 0 || moveData.z !== 0) speedOpacity = 0.3; 
                 }
 
-                // Smoothly Lerp Camera FOV
+                document.getElementById('speed-effect').style.opacity = speedOpacity;
                 camera.fov += (targetFov - camera.fov) * 0.1;
                 camera.updateProjectionMatrix();
 
-                // Dash Cooldown UI
+                // Dash Cooldown
                 if (dashCooldown > 0) {
                     dashCooldown -= deltaTime;
                     const btnDash = document.getElementById('btn-dash');
                     if (dashCooldown <= 0) {
-                        btnDash.style.opacity = '1.0';
-                        btnDash.innerText = "DASH";
+                        btnDash.style.opacity = '1.0'; btnDash.innerText = "DASH";
                     } else {
                         btnDash.innerText = Math.ceil(dashCooldown) + "s";
                     }
                 }
 
-                // --- A. HORIZONTAL MOVEMENT & WALL RUN ---
+                // -- Horizontal Movement --
                 const moveX = moveData.x * currentSpeed;
                 const moveZ = moveData.z * currentSpeed;
                 let isMoving = false;
@@ -353,70 +540,4 @@
                 if (moveX !== 0 || moveZ !== 0) {
                     isMoving = true;
                     const moveVector = new THREE.Vector3(moveX, 0, -moveZ);
-                    moveVector.applyQuaternion(camera.quaternion); 
-                    moveVector.y = 0; 
-                    moveVector.normalize();
-
-                    wallRaycaster.set(camera.position, moveVector);
-                    const wallHits = wallRaycaster.intersectObject(mapModel, true);
-
-                    if (wallHits.length === 0 || wallHits[0].distance > playerRadius) {
-                        camera.translateX(moveX);
-                        camera.translateZ(-moveZ);
-                    } else {
-                        // WALL RUN (Slide) LOGIC
-                        if (!isGrounded && yVelocity < 0) {
-                            yVelocity = -0.05; // Slow down fall dramatically
-                            jumps = 0; // Reset jumps so you can jump off the wall!
-                        }
-                    }
-                }
-                
-                // --- B. AUDIO SYNC: Constantly Running SFX ---
-                if (isMoving && isGrounded && audioUnlocked) {
-                    if (runSfx.paused) runSfx.play().catch(()=>{});
-                } else {
-                    if (!runSfx.paused) runSfx.pause();
-                }
-
-                // --- C. GRAVITY & FLOOR COLLISIONS ---
-                yVelocity -= gravity; 
-                camera.position.y += yVelocity;
-
-                floorRaycaster.set(camera.position, downVector);
-                const floorHits = floorRaycaster.intersectObject(mapModel, true);
-
-                if (floorHits.length > 0) {
-                    const distToFloor = floorHits[0].distance;
-
-                    if (distToFloor <= playerHeight && yVelocity <= 0) {
-                        camera.position.y += (playerHeight - distToFloor); 
-                        yVelocity = 0;
-                        isGrounded = true;
-                        jumps = 0; // Reset jumps on floor
-                    } 
-                    else if (distToFloor < playerHeight && isGrounded) {
-                        camera.position.y += (playerHeight - distToFloor);
-                    }
-                    else {
-                        isGrounded = false;
-                    }
-                } else {
-                    isGrounded = false; 
-                }
-            }
-
-            renderer.render(scene, camera);
-        }
-
-        animate();
-
-        // 8. WINDOW RESIZE HANDLING
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-    </script>
-</body>
-</html>
+                    moveVector.applyQuaternion(camera.quate
